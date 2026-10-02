@@ -16,12 +16,14 @@ from app.schemas.schemas import (
     AttemptStateOut, AttemptStartRequest, AnswerSaveRequest, AnswerSaveResponse,
     AntiCheatEventCreate, AntiCheatEventOut, HeartbeatRequest, HeartbeatResponse,
     AssessmentSubmitRequest, AssessmentResultOut, MonitorDashboardOut,
-    AdminAttemptActionRequest, AssessmentQuestionOut
+    AdminAttemptActionRequest, AssessmentQuestionOut, ContestQualityReportOut
 )
 from app.services.assessment_service import assessment_service
 from app.services.evaluation_engine import evaluation_engine
+from app.services.contest_quality import contest_quality_validator
 
 router = APIRouter(prefix="/assessments", tags=["Assessment Engine & Proctoring"])
+
 
 # =====================================================================
 # ASSESSMENT CRUD & LIFECYCLE ENDPOINTS
@@ -990,3 +992,19 @@ def get_assessment_all_results(
         "total_results": len(out),
         "results": out
     }
+
+@router.get("/{assessment_id}/quality-report", response_model=ContestQualityReportOut, dependencies=[Depends(api_general_rate_limiter)])
+def get_assessment_quality_report(
+    assessment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.VIEW_QUESTIONS))
+):
+    """
+    Contest & Assessment Problem Set Quality Report:
+    Audits problem duplicate overlap, difficulty spread, topic concentration, and test coverage rigor.
+    """
+    res = contest_quality_validator.validate_assessment_problem_set(assessment_id, db)
+    if "error" in res:
+        raise HTTPException(status_code=404, detail=res["error"])
+    return res
+

@@ -8,8 +8,10 @@ import { AttemptState, AttemptQuestionState, AntiCheatEventType, AntiCheatSeveri
 import {
   Shield, Clock, AlertTriangle, CheckCircle2, Bookmark,
   ChevronLeft, ChevronRight, Play, RefreshCw, Lock, Send,
-  Code2, FileText, CheckSquare, ListFilter, Maximize2, AlertOctagon
+  Code2, FileText, CheckSquare, ListFilter, Maximize2, AlertOctagon, Terminal
 } from "lucide-react";
+import { CodeEditor } from "@/components/CodeEditor";
+import { TestResults } from "@/components/TestResults";
 
 export default function TakeAssessmentPage() {
   const params = useParams();
@@ -635,44 +637,30 @@ export default function TakeAssessmentPage() {
                 {/* 3. Coding Question */}
                 {currentQ.question_type === "CODING" && (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2">
-                      <div className="flex items-center gap-2">
-                        <Code2 className="w-4 h-4 text-[var(--accent-primary)]" />
-                        <span className="text-xs font-semibold">Solution Code</span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={currentAnswer.submitted_language || "python"}
-                          onChange={(e) => handleCodeChange(currentQ.question_id, currentAnswer.submitted_code || "", e.target.value)}
-                          className="px-2.5 py-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] text-xs font-mono focus:outline-none"
-                        >
-                          <option value="python">Python</option>
-                          <option value="cpp">C++</option>
-                          <option value="c">C</option>
-                          <option value="java">Java</option>
-                        </select>
-                      </div>
+                    {/* Monaco Code Editor Component */}
+                    <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--bg-base)]">
+                      <CodeEditor
+                        code={currentAnswer.submitted_code || ""}
+                        onChange={(val) => handleCodeChange(currentQ.question_id, val, currentAnswer.submitted_language || "python")}
+                        language={currentAnswer.submitted_language || "python"}
+                        onLanguageChange={(newLang) => handleCodeChange(currentQ.question_id, currentAnswer.submitted_code || "", newLang)}
+                        height="360px"
+                      />
                     </div>
-
-                    <textarea
-                      rows={12}
-                      value={currentAnswer.submitted_code || ""}
-                      onChange={(e) => handleCodeChange(currentQ.question_id, e.target.value, currentAnswer.submitted_language || "python")}
-                      placeholder="// Write your solution code here..."
-                      className="w-full p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[var(--accent-primary)] leading-relaxed"
-                    />
 
                     {/* Visible Test Cases & Execution Runner */}
                     <div className="space-y-3 pt-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-[var(--text-secondary)] uppercase">Sample Test Cases</span>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Terminal className="w-4 h-4 text-[var(--accent-primary)]" />
+                          <span className="text-xs font-bold text-[var(--text-secondary)] uppercase">Sample Test Cases</span>
+                        </div>
                         <button
                           onClick={() => handleRunVisibleCode(currentQ)}
                           disabled={codeRunning}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition cursor-pointer shadow-xs"
                         >
-                          <Play className="w-3.5 h-3.5" /> {codeRunning ? "Executing..." : "Run Test Cases"}
+                          <Play className="w-3.5 h-3.5" /> {codeRunning ? "Executing..." : "Run Code"}
                         </button>
                       </div>
 
@@ -682,11 +670,11 @@ export default function TakeAssessmentPage() {
                             <div key={idx} className="p-3 rounded-lg bg-[var(--bg-base)] border border-[var(--border-subtle)] space-y-1.5 text-xs font-mono">
                               <span className="text-[10px] font-bold text-[var(--text-muted)]">Sample #{idx + 1}</span>
                               <div>
-                                <span className="text-[10px] text-[var(--text-secondary)] block">Input:</span>
+                                <span className="text-[10px] text-[var(--text-secondary)] block font-sans">Input:</span>
                                 <pre className="bg-[var(--bg-surface)] p-1.5 rounded border border-[var(--border-subtle)] text-[11px] overflow-x-auto">{tc.input_data}</pre>
                               </div>
                               <div>
-                                <span className="text-[10px] text-[var(--text-secondary)] block">Expected Output:</span>
+                                <span className="text-[10px] text-[var(--text-secondary)] block font-sans">Expected Output:</span>
                                 <pre className="bg-[var(--bg-surface)] p-1.5 rounded border border-[var(--border-subtle)] text-[11px] overflow-x-auto">{tc.expected_output}</pre>
                               </div>
                             </div>
@@ -696,27 +684,10 @@ export default function TakeAssessmentPage() {
                         <p className="text-xs text-[var(--text-muted)]">No visible sample test cases for this problem.</p>
                       )}
 
-                      {/* Code Execution Results Panel */}
-                      {codeRunResult && (
-                        <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] space-y-2 text-xs">
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold">Execution Output</span>
-                            <span className={`font-mono font-bold px-2 py-0.5 rounded text-[10px] ${
-                              codeRunResult.verdict === "Accepted" ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
-                            }`}>
-                              {codeRunResult.verdict} ({codeRunResult.execution_time_ms}ms)
-                            </span>
-                          </div>
-                          {codeRunResult.output && (
-                            <pre className="p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] font-mono text-[11px] overflow-x-auto">
-                              {codeRunResult.output}
-                            </pre>
-                          )}
-                          {codeRunResult.error_message && (
-                            <pre className="p-2 rounded bg-red-500/10 text-red-600 dark:text-red-400 font-mono text-[10px] overflow-x-auto">
-                              {codeRunResult.error_message}
-                            </pre>
-                          )}
+                      {/* Structured Test Results Component */}
+                      {(codeRunResult || codeRunning) && (
+                        <div className="pt-2">
+                          <TestResults results={codeRunResult} isRunning={codeRunning} />
                         </div>
                       )}
                     </div>

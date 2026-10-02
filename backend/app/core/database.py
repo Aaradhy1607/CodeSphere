@@ -155,8 +155,27 @@ def auto_migrate_db():
                     conn.exec_driver_sql(f"ALTER TABLE questions ADD COLUMN {col_name} {col_def}")
         except Exception as e:
             logger.warning(f"[DB Auto-Migrate] Warning on questions table: {e}")
+
+        # Check submissions table columns
+        try:
+            result = conn.exec_driver_sql("PRAGMA table_info(submissions)").fetchall()
+            existing_sub_cols = {row[1] for row in result}
+            if "status" not in existing_sub_cols and len(existing_sub_cols) > 0:
+                conn.exec_driver_sql("ALTER TABLE submissions ADD COLUMN status VARCHAR(50) DEFAULT 'QUEUED'")
+        except Exception as e:
+            logger.warning(f"[DB Auto-Migrate] Warning on submissions table: {e}")
+
+        # Check test_cases table columns
+        try:
+            result = conn.exec_driver_sql("PRAGMA table_info(test_cases)").fetchall()
+            existing_tc_cols = {row[1] for row in result}
+            if "category" not in existing_tc_cols and len(existing_tc_cols) > 0:
+                conn.exec_driver_sql("ALTER TABLE test_cases ADD COLUMN category VARCHAR(50) DEFAULT 'NORMAL'")
+        except Exception as e:
+            logger.warning(f"[DB Auto-Migrate] Warning on test_cases table: {e}")
         
         conn.commit()
+
 
 def get_db():
     db = SessionLocal()

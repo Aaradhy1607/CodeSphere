@@ -1,3 +1,4 @@
+import json
 import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
@@ -156,7 +157,8 @@ class AssessmentEvaluationEngine:
         if not test_cases:
             return marks, SubmissionVerdict.AC, {"note": "No test cases configured, full marks awarded"}, 0.0, 0.0
 
-        eval_result = code_runner.evaluate_test_cases(code, language, test_cases)
+        time_limit = getattr(question, "time_limit_seconds", 3.0) or 3.0
+        eval_result = code_runner.evaluate_test_cases(code, language, test_cases, timeout_seconds=time_limit)
         
         passed_count = eval_result.get("passed_count", 0)
         total_count = eval_result.get("total_count", len(test_cases))
@@ -170,7 +172,7 @@ class AssessmentEvaluationEngine:
             verdict,
             eval_result,
             eval_result.get("max_time_ms", 0.0),
-            0.0
+            eval_result.get("peak_memory_kb", 0.0)
         )
 
     def evaluate_subjective(
@@ -288,7 +290,7 @@ class AssessmentEvaluationEngine:
                 section_breakdown[section]["correct"] += 1
                 difficulty_breakdown[diff_key]["correct"] += 1
                 topic_breakdown[topic]["correct"] += 1
-            elif verdict in ["INCORRECT", "PARTIAL", SubmissionVerdict.WA, SubmissionVerdict.TLE, SubmissionVerdict.MLE, SubmissionVerdict.CE, SubmissionVerdict.RE]:
+            elif verdict in ["INCORRECT", "PARTIAL", SubmissionVerdict.WA, SubmissionVerdict.TLE, SubmissionVerdict.MLE, SubmissionVerdict.OLE, SubmissionVerdict.CE, SubmissionVerdict.RE]:
                 incorrect_count += 1
                 attempted_count += 1
             elif verdict == "MANUAL_REVIEW":

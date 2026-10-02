@@ -129,6 +129,7 @@ class TestCaseBase(BaseModel):
     input_data: str
     expected_output: str
     is_hidden: bool = False
+    category: Optional[str] = "NORMAL"
     explanation: Optional[str] = None
     points: int = 10
 
@@ -140,6 +141,7 @@ class TestCaseOut(TestCaseBase):
     question_id: int
 
     model_config = ConfigDict(from_attributes=True)
+
 
 # ================= QUESTION SCHEMAS =================
 class ExampleCase(BaseModel):
@@ -466,6 +468,42 @@ class FinalSubmitResult(BaseModel):
     error_message: Optional[str] = None
     is_final: bool
 
+class AsyncSubmitResult(BaseModel):
+    submission_id: int
+    status: str
+    message: str = "Submission queued for evaluation."
+    enqueued_at: datetime
+
+class SubmissionStatusOut(BaseModel):
+    submission_id: int
+    status: str
+    verdict: Optional[str] = None
+    passed_test_cases: int = 0
+    total_test_cases: int = 0
+    score: float = 0.0
+    execution_time_ms: float = 0.0
+    memory_used_kb: float = 0.0
+    error_message: Optional[str] = None
+    is_final: bool = True
+    submitted_at: datetime
+    test_case_results: Optional[List[Dict[str, Any]]] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class JudgeMetricsOut(BaseModel):
+    queued_submissions: int
+    running_submissions: int
+    completed_submissions: int
+    failed_submissions: int
+    total_processed: int
+    average_queue_wait_ms: float
+    average_execution_time_ms: float
+    peak_memory_kb: float
+    sandbox_failures: int
+    active_workers: int
+    sandbox_backend: str
+    docker_available: bool
+
 class SubmissionOut(BaseModel):
     id: int
     event_id: int
@@ -478,6 +516,7 @@ class SubmissionOut(BaseModel):
     language: str
     code: str
     verdict: str
+    status: Optional[str] = "COMPLETED"
     passed_test_cases: int
     total_test_cases: int
     score: float
@@ -816,4 +855,93 @@ class AdminAttemptActionRequest(BaseModel):
     action: str = Field(..., description="EXTEND_TIME, TERMINATE, INVALIDATE, FORCE_SUBMIT")
     extend_minutes: Optional[int] = 10
     reason: Optional[str] = None
+
+# ================= PHASE 7 SCHEMAS =================
+class ProblemQualityReportOut(BaseModel):
+    quality_score: float
+    grade: str
+    is_ready_for_review: bool
+    breakdown: Dict[str, float]
+    test_suite_report: Dict[str, Any]
+    errors: List[str] = []
+    warnings: List[str] = []
+
+class DifficultyIntelligenceOut(BaseModel):
+    question_id: int
+    title: str
+    author_difficulty_score: float
+    author_difficulty_label: str
+    has_sufficient_data: bool
+    sample_count: int
+    min_required_samples: Optional[int] = 5
+    distinct_students: Optional[int] = 0
+    observed_difficulty_score: Optional[float] = None
+    observed_difficulty_label: Optional[str] = None
+    difficulty_gap: Optional[float] = None
+    acceptance_rate: Optional[float] = 0.0
+    first_attempt_ac_rate: Optional[float] = 0.0
+    avg_attempts_to_ac: Optional[float] = 0.0
+    avg_execution_time_ms: Optional[float] = 0.0
+    avg_memory_kb: Optional[float] = 0.0
+    verdict_distribution: Dict[str, int] = {}
+    language_breakdown: Dict[str, Any] = {}
+    notes: Optional[str] = None
+
+class TestCaseAnalysisOut(BaseModel):
+    quality_score: float
+    grade: str
+    is_valid: bool
+    total_count: int
+    visible_count: int
+    hidden_count: int
+    total_points: int
+    categories_present: List[str] = []
+    missing_categories: List[str] = []
+    duplicate_pairs: List[Dict[str, Any]] = []
+    errors: List[str] = []
+    warnings: List[str] = []
+
+class ContestQualityReportOut(BaseModel):
+    assessment_id: int
+    assessment_title: str
+    problem_count: int
+    quality_score: float
+    grade: str
+    is_ready_to_publish: bool
+    difficulty_spread: Dict[str, Any] = {}
+    topic_distribution: Dict[str, int] = {}
+    time_budget: Dict[str, Any] = {}
+    duplicate_pairs: List[Dict[str, Any]] = []
+    weak_test_problems: List[Dict[str, Any]] = []
+    errors: List[str] = []
+    warnings: List[str] = []
+
+class SubmissionHistoryItemOut(BaseModel):
+    attempt_number: int
+    submission_id: int
+    submitted_at: Optional[str] = None
+    language: str
+    verdict: str
+    score: Optional[float] = 0.0
+    execution_time_ms: float
+    time_limit_ms: float
+    time_utilization_percent: float
+    memory_used_kb: float
+    memory_limit_kb: float
+    memory_utilization_percent: float
+    test_cases_passed: int
+    test_cases_total: int
+    code_heuristics: Dict[str, Any] = {}
+    error_message: Optional[str] = None
+
+class StudentSubmissionHistoryOut(BaseModel):
+    question_id: int
+    question_title: str
+    total_submissions: int
+    has_accepted: bool
+    best_execution_time_ms: Optional[float] = None
+    best_memory_kb: Optional[float] = None
+    improvement_note: Optional[str] = None
+    history: List[SubmissionHistoryItemOut] = []
+
 

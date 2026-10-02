@@ -227,9 +227,35 @@ class SubmissionVerdict(str, enum.Enum):
     WA = "Wrong Answer"
     TLE = "Time Limit Exceeded"
     MLE = "Memory Limit Exceeded"
+    OLE = "Output Limit Exceeded"
     CE = "Compilation Error"
     RE = "Runtime Error"
     PENDING = "Pending"
+
+class SubmissionStatus(str, enum.Enum):
+    QUEUED = "QUEUED"
+    COMPILING = "COMPILING"
+    RUNNING = "RUNNING"
+    EVALUATING = "EVALUATING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+class TestCaseCategory(str, enum.Enum):
+    NORMAL = "NORMAL"
+    BOUNDARY = "BOUNDARY"
+    MINIMUM = "MINIMUM"
+    MAXIMUM = "MAXIMUM"
+    EMPTY = "EMPTY"
+    SINGLETON = "SINGLETON"
+    DUPLICATE = "DUPLICATE"
+    SORTED = "SORTED"
+    REVERSE_SORTED = "REVERSE_SORTED"
+    ADVERSARIAL = "ADVERSARIAL"
+    OVERFLOW = "OVERFLOW"
+    PERFORMANCE = "PERFORMANCE"
+    RANDOM = "RANDOM"
+
 
 class AdminAllowlist(Base):
     __tablename__ = "admin_allowlist"
@@ -435,7 +461,7 @@ class Question(Base):
     # Quality Scoring & Deduplication
     quality_score = Column(Float, default=0.0) # 0-100 deterministic quality score
     quality_breakdown = Column(JSON, default=dict) # {completeness, clarity, correctness, difficulty_consistency, test_coverage, notes}
-    similarity_hash = Column(String(64), nullable=True, index=True)
+    similarity_hash = Column(String(64), nullable=True)
     similarity_score = Column(Float, default=0.0)
     duplicate_of_id = Column(Integer, ForeignKey("questions.id", ondelete="SET NULL"), nullable=True)
     
@@ -498,15 +524,18 @@ class TestCase(Base):
         Index("ix_test_cases_qid_hidden", "question_id", "is_hidden"),
     )
 
+
     id = Column(Integer, primary_key=True, index=True)
     question_id = Column(Integer, ForeignKey("questions.id"), nullable=False, index=True)
     input_data = Column(Text, nullable=False)
     expected_output = Column(Text, nullable=False)
     is_hidden = Column(Boolean, default=False, index=True)  # Hidden test cases not exposed to students
+    category = Column(String(50), default=TestCaseCategory.NORMAL.value, index=True)
     explanation = Column(Text, nullable=True)
     points = Column(Integer, default=10)
 
     question = relationship("Question", back_populates="test_cases")
+
 
 class EventQuestion(Base):
     __tablename__ = "event_questions"
@@ -546,7 +575,8 @@ class Submission(Base):
     code = Column(Text, nullable=False)
     language = Column(String(50), nullable=False)  # python, cpp, c, java
     
-    verdict = Column(String(50), default=SubmissionVerdict.PENDING, index=True)
+    verdict = Column(String(50), default=SubmissionVerdict.PENDING)
+    status = Column(String(50), default=SubmissionStatus.QUEUED.value, index=True)
     passed_test_cases = Column(Integer, default=0)
     total_test_cases = Column(Integer, default=0)
     score = Column(Float, default=0.0)

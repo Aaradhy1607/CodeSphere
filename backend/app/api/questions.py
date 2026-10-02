@@ -21,7 +21,8 @@ from app.schemas.schemas import (
     QuestionReviewRequest, QuestionPublishRequest, QuestionVersionOut,
     QuestionFeedbackCreate, QuestionFeedbackOut,
     DuplicateCheckRequest, DuplicateCheckResult, QuestionAnalyticsOut,
-    ImageUploadResponse
+    ImageUploadResponse,
+    ProblemQualityReportOut, DifficultyIntelligenceOut, TestCaseAnalysisOut
 )
 from app.services.gemini_ai import gemini_service
 from app.services.code_runner import code_runner
@@ -29,8 +30,12 @@ from app.services.quality_scorer import quality_scorer
 from app.services.duplicate_detector import duplicate_detector
 from app.services.adaptive_learning import adaptive_learning_engine
 from app.services.media_storage import media_storage
+from app.services.problem_quality import problem_quality_engine
+from app.services.test_case_quality import test_case_quality_validator
+from app.services.difficulty_intelligence import difficulty_intelligence
 
 router = APIRouter(prefix="/questions", tags=["Question Management & Intelligent Engine"])
+
 
 def _slugify(text: str) -> str:
     s = text.lower().strip()
@@ -287,10 +292,12 @@ def create_question(
             input_data=tc.input_data,
             expected_output=tc.expected_output,
             is_hidden=tc.is_hidden,
+            category=tc.category or "NORMAL",
             explanation=tc.explanation,
             points=tc.points
         )
         db.add(test_case)
+
 
     db.commit()
     db.refresh(q)
@@ -875,6 +882,99 @@ def get_question_analytics(
         quality_score=q.quality_score or 0.0,
         quality_breakdown=q.quality_breakdown or {}
     )
+
+@router.get("/{question_id}/quality-report", response_model=ProblemQualityReportOut, dependencies=[Depends(api_general_rate_limiter)])
+def get_question_quality_report(
+    question_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Comprehensive Problem Quality Report:
+    Evaluates statement completeness, constraints, limits, reference solutions, and test suite edge cases.
+    """
+    q = db.query(Question).options(joinedload(Question.test_cases)).filter(Question.id == question_id).first()
+    if not q:
+        raise HTTPException(status_code=404, detail="Question not found.")
+
+    test_cases_dicts = [
+        {
+            "id": tc.id,
+            "input_data": tc.input_data,
+            "expected_output": tc.expected_output,
+            "is_hidden": tc.is_hidden,
+            "category": tc.category,
+            "points": tc.points
+        }
+        for tc in q.test_cases
+    ]
+
+    report = problem_quality_engine.evaluate_problem(
+        title=q.title,
+        problem_statement=q.problem_statement,
+        input_format=q.input_format or "",
+        output_format=q.output_format or "",
+        constraints=q.constraints or "",
+        examples=q.examples or [],
+        difficulty_score=q.difficulty_score or 5,
+        expected_time_complexity=q.expected_time_complexity or "O(N)",
+        expected_space_complexity=q.expected_space_complexity or "O(1)",
+        time_limit_seconds=float(q.time_limit_seconds or 2.0),
+        memory_limit_mb=int(q.memory_limit_mb or 256),
+        reference_solutions=q.reference_solutions or {},
+        test_cases=test_cases_dicts,
+        question_type=q.question_type or QuestionType.CODING.value
+    )
+    return report
+
+@router.get("/{question_id}/difficulty-intelligence", response_model=DifficultyIntelligenceOut, dependencies=[Depends(api_general_rate_limiter)])
+def get_question_difficulty_intelligence(
+    question_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Factual Observed Difficulty Intelligence:
+    Compares Author Difficulty vs Real Observed Difficulty derived from real student submissions.
+    """
+    res = difficulty_intelligence.analyze_question_difficulty(question_id, db)
+    if "error" in res:
+        raise HTTPException(status_code=404, detail=res["error"])
+    return res
+
+@router.get("/{question_id}/test-case-analysis", response_model=TestCaseAnalysisOut, dependencies=[Depends(api_general_rate_limiter)])
+def get_question_test_case_analysis(
+    question_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.VIEW_QUESTIONS))
+):
+    """
+    Deep Test Case Suite & Edge-Case Coverage Analysis.
+    Restricted to Educators and Admins; protects hidden test confidentiality.
+    """
+    q = db.query(Question).options(joinedload(Question.test_cases)).filter(Question.id == question_id).first()
+    if not q:
+        raise HTTPException(status_code=404, detail="Question not found.")
+
+    test_cases_dicts = [
+        {
+            "id": tc.id,
+            "input_data": tc.input_data,
+            "expected_output": tc.expected_output,
+            "is_hidden": tc.is_hidden,
+            "category": tc.category,
+            "points": tc.points
+        }
+        for tc in q.test_cases
+    ]
+
+    report = test_case_quality_validator.validate_test_suite(
+        test_cases_dicts,
+        expected_time_limit_s=float(q.time_limit_seconds or 2.0),
+        expected_memory_limit_mb=int(q.memory_limit_mb or 256)
+    )
+    return report
+
 
 @router.post("/{question_id}/feedback", response_model=QuestionFeedbackOut)
 def submit_question_feedback(

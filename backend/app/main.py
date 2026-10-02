@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.database import engine, Base, SessionLocal, auto_migrate_db, check_db_health
 from app.core.cache import cache
 from app.services.worker import task_worker
+from app.services.judge_queue import judge_queue_manager
 from app.services.seeder import seed_database
 from app.api import (
     auth, students, events, questions, execute, leaderboards, analytics, reports, assessments
@@ -84,15 +85,23 @@ async def lifespan(app: FastAPI):
     else:
         logger.info(f"[CACHE INITIALIZED] Backend: {cache_health.get('backend')} | Status: {cache_health.get('status')}")
 
-    # Start background task worker
+    # Start background task worker and judge queue worker
     task_worker.start(worker_count=settings.WORKER_CONCURRENCY)
-    logger.info(f"[CodeSphere] Server ready in {settings.ENVIRONMENT} mode. Background workers active.")
+    judge_queue_manager.start(worker_count=settings.CODE_RUNNER_MAX_CONCURRENCY)
+    
+    # Sweep any stuck submissions left from a previous crash/reboot
+    recovered = judge_queue_manager.recover_stuck_submissions(max_stuck_seconds=300.0)
+    if recovered > 0:
+        logger.warning(f"[CodeSphere Judge] Recovered {recovered} orphaned submissions from previous session.")
+
+    logger.info(f"[CodeSphere] Server ready in {settings.ENVIRONMENT} mode. Background task and judge workers active.")
     
     yield
     
     # Graceful shutdown
-    logger.info("[CodeSphere] Shutting down background workers...")
+    logger.info("[CodeSphere] Shutting down background and judge workers...")
     await task_worker.stop()
+    await judge_queue_manager.stop()
     logger.info("[CodeSphere] Server shutdown complete.")
 
 app = FastAPI(
