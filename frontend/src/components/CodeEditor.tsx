@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
-import { Code2, RotateCcw, Maximize2, Minimize2 } from "lucide-react";
+import { Code2, RotateCcw, Maximize2, Minimize2, AlertCircle } from "lucide-react";
 import { Spinner } from "./ui/LoadingState";
 import { useTheme } from "@/lib/themeContext";
 
@@ -24,9 +24,10 @@ interface CodeEditorProps {
   onLanguageChange: (lang: string) => void;
   height?: string;
   readOnly?: boolean;
+  onRun?: () => void;
 }
 
-const DEFAULT_TEMPLATES: Record<string, string> = {
+export const DEFAULT_TEMPLATES: Record<string, string> = {
   python: `import sys
 
 def solve():
@@ -108,12 +109,15 @@ export function CodeEditor({
   language,
   onLanguageChange,
   height = "100%",
-  readOnly = false
+  readOnly = false,
+  onRun
 }: CodeEditorProps) {
   const { resolvedTheme } = useTheme();
   const [fontSize, setFontSize] = useState<number>(14);
   const [editorTheme, setEditorTheme] = useState<string>(resolvedTheme === "dark" ? "vs-dark" : "vs");
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
+  const editorRef = useRef<any>(null);
 
   // Sync editor theme with app theme when app theme changes
   useEffect(() => {
@@ -121,8 +125,13 @@ export function CodeEditor({
   }, [resolvedTheme]);
 
   const handleResetTemplate = () => {
+    if (code && code.trim().length > 0 && !showResetConfirm) {
+      setShowResetConfirm(true);
+      return;
+    }
     const template = DEFAULT_TEMPLATES[language] || "";
     onChange(template);
+    setShowResetConfirm(false);
   };
 
   const monacoLanguage =
@@ -132,9 +141,20 @@ export function CodeEditor({
       ? "javascript"
       : language;
 
+  const handleEditorDidMount = (editor: any, monaco: any) => {
+    editorRef.current = editor;
+
+    // Add Keybinding: Ctrl+Enter / Cmd+Enter to Run Code
+    if (onRun) {
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+        onRun();
+      });
+    }
+  };
+
   return (
     <div
-      className={`flex flex-col w-full h-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md overflow-hidden ${
+      className={`flex flex-col w-full h-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg overflow-hidden ${
         isFullscreen ? "fixed inset-0 z-50 p-4 bg-[var(--bg-canvas)]" : ""
       }`}
     >
@@ -150,7 +170,7 @@ export function CodeEditor({
             value={language}
             onChange={(e) => onLanguageChange(e.target.value)}
             disabled={readOnly}
-            className="bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-primary)] text-xs font-medium rounded px-2 py-1 focus-visible:outline-none cursor-pointer"
+            className="bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-primary)] text-xs font-medium rounded-md px-2.5 py-1 focus-visible:outline-none cursor-pointer"
             aria-label="Select Programming Language"
           >
             <option value="python">Python 3 (CPython)</option>
@@ -166,12 +186,14 @@ export function CodeEditor({
           <select
             value={fontSize}
             onChange={(e) => setFontSize(Number(e.target.value))}
-            className="bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-secondary)] text-xs rounded px-2 py-1 focus-visible:outline-none cursor-pointer"
+            className="bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-secondary)] text-xs rounded-md px-2 py-1 focus-visible:outline-none cursor-pointer"
             title="Font Size"
             aria-label="Font Size"
           >
             <option value={12}>12px</option>
+            <option value={13}>13px</option>
             <option value={14}>14px</option>
+            <option value={15}>15px</option>
             <option value={16}>16px</option>
             <option value={18}>18px</option>
           </select>
@@ -180,7 +202,7 @@ export function CodeEditor({
           <select
             value={editorTheme}
             onChange={(e) => setEditorTheme(e.target.value)}
-            className="bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-secondary)] text-xs rounded px-2 py-1 focus-visible:outline-none cursor-pointer"
+            className="bg-[var(--bg-surface)] border border-[var(--border-default)] text-[var(--text-secondary)] text-xs rounded-md px-2 py-1 focus-visible:outline-none cursor-pointer"
             title="Editor Theme"
             aria-label="Editor Theme"
           >
@@ -189,21 +211,49 @@ export function CodeEditor({
           </select>
 
           {!readOnly && (
-            <button
-              type="button"
-              onClick={handleResetTemplate}
-              className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition focus-visible:outline-none"
-              title="Reset boilerplate template"
-              aria-label="Reset Boilerplate"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={handleResetTemplate}
+                className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-md transition focus-visible:outline-none"
+                title="Reset boilerplate template"
+                aria-label="Reset Boilerplate"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+
+              {showResetConfirm && (
+                <div className="absolute right-0 top-8 z-50 w-56 p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-focus)] shadow-lg space-y-2 text-xs">
+                  <div className="flex items-start gap-1.5 text-amber-500 font-semibold">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>Reset code template?</span>
+                  </div>
+                  <p className="text-[11px] text-[var(--text-secondary)]">Your current code will be replaced with standard starter code.</p>
+                  <div className="flex items-center justify-end gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowResetConfirm(false)}
+                      className="px-2 py-0.5 rounded text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetTemplate}
+                      className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           <button
             type="button"
             onClick={() => setIsFullscreen(!isFullscreen)}
-            className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition focus-visible:outline-none"
+            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-md transition focus-visible:outline-none"
             title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
             aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
           >
@@ -220,6 +270,7 @@ export function CodeEditor({
           theme={editorTheme}
           value={code}
           onChange={(val) => onChange(val || "")}
+          onMount={handleEditorDidMount}
           options={{
             fontSize,
             minimap: { enabled: false },
@@ -230,11 +281,21 @@ export function CodeEditor({
             readOnly,
             lineNumbers: "on",
             wordWrap: "on",
-            padding: { top: 10, bottom: 10 },
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            padding: { top: 12, bottom: 12 },
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+            bracketPairColorization: { enabled: true },
+            cursorBlinking: "smooth",
+            cursorSmoothCaretAnimation: "on",
+            renderWhitespace: "selection",
+            formatOnPaste: true,
+            formatOnType: true,
+            guides: { indentation: true, bracketPairs: true },
+            suggestOnTriggerCharacters: true,
+            acceptSuggestionOnEnter: "on"
           }}
         />
       </div>
     </div>
   );
 }
+

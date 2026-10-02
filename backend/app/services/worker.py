@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import time
 import logging
 import uuid
@@ -87,7 +88,7 @@ class BackgroundTaskManager:
 
                     try:
                         logger.debug(f"[{worker_name}] Executing job {job_id} ({job.get('handler_name') if job else 'unknown'})")
-                        if asyncio.iscoroutinefunction(handler):
+                        if inspect.iscoroutinefunction(handler):
                             result = await handler(*args, **kwargs)
                         else:
                             # Run synchronous blocking tasks in default threadpool executor

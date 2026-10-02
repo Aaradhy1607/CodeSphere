@@ -365,6 +365,16 @@ class AssessmentService:
             if ans.is_flagged:
                 flagged_ids.append(ans.question_id)
 
+        # Count tab switches
+        tab_switches = (
+            db.query(AntiCheatEvent)
+            .filter(
+                AntiCheatEvent.attempt_id == attempt.id,
+                AntiCheatEvent.event_type.in_(["TAB_BLUR", "TAB_VISIBILITY_CHANGE", "FULLSCREEN_EXIT", "TAB_SWITCH"])
+            )
+            .count()
+        )
+
         return {
             "attempt_id": attempt.id,
             "assessment_id": assessment.id,
@@ -381,7 +391,9 @@ class AssessmentService:
             "questions": sanitized_questions,
             "anti_cheat_policy": assessment.anti_cheat_policy or {},
             "integrity_score": attempt.integrity_score,
-            "session_token": attempt.session_token or ""
+            "session_token": attempt.session_token or "",
+            "current_session_token": attempt.session_token or "",
+            "tab_switch_count": tab_switches
         }
 
     def save_answer(
@@ -554,24 +566,35 @@ class AssessmentService:
 
         now = datetime.datetime.now(datetime.timezone.utc)
         
-        # Save any final sync answers passed with submit payload
-        if final_sync_answers and isinstance(final_sync_answers, dict):
-            for q_id_str, ans_val in final_sync_answers.items():
+        # Save any final sync answers passed with submit payload (dict or list format)
+        if final_sync_answers:
+            sync_items = []
+            if isinstance(final_sync_answers, dict):
+                sync_items = list(final_sync_answers.items())
+            elif isinstance(final_sync_answers, list):
+                for item in final_sync_answers:
+                    if isinstance(item, dict) and "question_id" in item:
+                        sync_items.append((item["question_id"], item))
+
+            for q_id_val, ans_val in sync_items:
                 try:
-                    q_id = int(q_id_str)
+                    q_id = int(q_id_val)
                     existing_ans = next((a for a in attempt.answers if a.question_id == q_id), None)
+                    clean_ans = ans_val if isinstance(ans_val, dict) else {"selected_option": ans_val}
                     if not existing_ans:
                         new_ans = AttemptAnswer(
                             attempt_id=attempt_id,
                             question_id=q_id,
-                            answer_data=ans_val if isinstance(ans_val, dict) else {"selected_option": ans_val},
-                            is_flagged=False,
+                            answer_data=clean_ans,
+                            is_flagged=clean_ans.get("is_flagged", False),
                             version=1,
                             saved_at=now
                         )
                         db.add(new_ans)
                     else:
-                        existing_ans.answer_data = ans_val if isinstance(ans_val, dict) else {"selected_option": ans_val}
+                        existing_ans.answer_data = clean_ans
+                        if "is_flagged" in clean_ans:
+                            existing_ans.is_flagged = clean_ans["is_flagged"]
                         existing_ans.saved_at = now
                 except (ValueError, TypeError):
                     continue

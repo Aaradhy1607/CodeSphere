@@ -1,6 +1,8 @@
 import os
 import sys
 import time
+import uuid
+import inspect
 import subprocess
 import tempfile
 import shutil
@@ -81,9 +83,11 @@ class BaseExecutionBackend(ABC):
 
 class LocalProcessBackend(BaseExecutionBackend):
     """
-    Hardened OS process execution backend with strict environment isolation,
-    process tree cleanup, bounded stdout/stderr streaming (OLE protection),
-    and peak memory usage measurement (MLE detection).
+    Development Fallback OS Process Execution Backend.
+    Provides local subprocess execution with sanitized environment variables (stripping secrets),
+    process tree cleanup, bounded stdout/stderr streaming (OLE protection), and timeout enforcement.
+    NOTE: Does not provide full kernel-level isolation or cgroups guarantees. Use DockerExecutionBackend
+    for production sandboxing.
     """
     def __init__(self, is_windows: bool = (os.name == 'nt')):
         self.is_windows = is_windows
@@ -565,7 +569,7 @@ class SandboxedCodeRunner:
             try:
                 compile_cmd = [gpp_bin, "-O2", "-std=c++17", src_path, "-o", exe_path]
                 if self.is_windows:
-                    compile_cmd.extend(["-static-libgcc", "-static-libstdc++"])
+                    compile_cmd.extend(["-static", "-static-libgcc", "-static-libstdc++"])
                 compile_proc = subprocess.run(
                     compile_cmd,
                     capture_output=True,
@@ -602,7 +606,7 @@ class SandboxedCodeRunner:
                 # Compile strictly as C (C11 standard with math library linked)
                 compile_cmd = [gcc_bin, "-O2", "-std=c11", src_path, "-o", exe_path, "-lm"]
                 if self.is_windows:
-                    compile_cmd.extend(["-static-libgcc"])
+                    compile_cmd.extend(["-static", "-static-libgcc"])
                 compile_proc = subprocess.run(
                     compile_cmd,
                     capture_output=True,

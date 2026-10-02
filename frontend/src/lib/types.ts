@@ -273,8 +273,71 @@ export interface FinalSubmitResult {
   passed_test_cases: number;
   total_test_cases: number;
   execution_time_ms: number;
+  memory_used_kb?: number;
   error_message?: string;
   is_final: boolean;
+}
+
+export interface AsyncSubmitResult {
+  submission_id: number;
+  status: "QUEUED" | "COMPILING" | "RUNNING" | "EVALUATING" | "COMPLETED" | "FAILED" | string;
+  message: string;
+  enqueued_at: string;
+}
+
+export interface SubmissionStatusOut {
+  submission_id: number;
+  status: "QUEUED" | "COMPILING" | "RUNNING" | "EVALUATING" | "COMPLETED" | "FAILED" | string;
+  verdict?: string;
+  passed_test_cases: number;
+  total_test_cases: number;
+  score: number;
+  execution_time_ms: number;
+  memory_used_kb: number;
+  error_message?: string;
+  is_final: boolean;
+  submitted_at: string;
+  test_case_results?: {
+    test_case_id?: number;
+    is_hidden: boolean;
+    passed: boolean;
+    verdict?: string;
+    time_ms: number;
+    memory_kb: number;
+    output?: string;
+    expected?: string;
+    error?: string;
+  }[];
+}
+
+export interface SubmissionHistoryItemOut {
+  attempt_number: number;
+  submission_id: number;
+  submitted_at?: string;
+  language: string;
+  verdict: string;
+  score?: number;
+  execution_time_ms: number;
+  time_limit_ms: number;
+  time_utilization_percent: number;
+  memory_used_kb: number;
+  memory_limit_kb: number;
+  memory_utilization_percent: number;
+  test_cases_passed: number;
+  test_cases_total: number;
+  code_heuristics?: Record<string, any>;
+  error_message?: string;
+}
+
+export interface StudentSubmissionHistoryOut {
+  question_id: number;
+  question_title: string;
+  total_submissions: number;
+  has_accepted: boolean;
+  best_execution_time_ms?: number;
+  best_memory_kb?: number;
+  improvement_note?: string;
+  history: SubmissionHistoryItemOut[];
 }
 
 export interface Submission {

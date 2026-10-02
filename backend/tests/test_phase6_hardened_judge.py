@@ -84,13 +84,23 @@ def _is_compiler_available(bin_name: str) -> bool:
         lang = "cpp" if "++" in bin_name else "c"
         if lang == "c":
             test_code = """#include <stdio.h>
-int main() { int x = 0; if (scanf("%d", &x) == 1) printf("%d\\n", x + 1); return 0; }
+#include <stdlib.h>
+int main() {
+    int a, b;
+    if (scanf("%d %d", &a, &b) == 2) {
+        int *sum = (int*)malloc(sizeof(int));
+        *sum = a + b;
+        printf("%d\\n", *sum);
+        free(sum);
+    }
+    return 0;
+}
 """
         else:
             test_code = """#include <iostream>
 int main() { int x = 0; if (std::cin >> x) std::cout << (x + 1) << std::endl; return 0; }
 """
-        res = code_runner.evaluate_test_cases(test_code, lang, [{"id": 1, "input_data": "1\n", "expected_output": "2", "points": 10, "is_hidden": False}])
+        res = code_runner.evaluate_test_cases(test_code, lang, [{"id": 1, "input_data": "7 8\n", "expected_output": "15", "points": 10, "is_hidden": False}])
         return res.get("verdict") == SubmissionVerdict.AC
     except Exception:
         return False

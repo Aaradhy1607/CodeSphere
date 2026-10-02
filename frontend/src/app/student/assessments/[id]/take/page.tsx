@@ -634,59 +634,117 @@ export default function TakeAssessmentPage() {
                   </div>
                 )}
 
-                {/* 3. Coding Question */}
+                {/* 3. Coding Question Workspace */}
                 {currentQ.question_type === "CODING" && (
                   <div className="space-y-4">
+                    {/* Top Action / Execution Bar */}
+                    <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-[var(--bg-base)] border border-[var(--border-subtle)]">
+                      <div className="flex items-center gap-2">
+                        <Code2 className="w-4 h-4 text-[var(--accent-primary)]" />
+                        <span className="text-xs font-bold text-[var(--text-primary)]">Code Workspace</span>
+                        <span className="text-[10px] text-[var(--text-muted)] font-mono hidden sm:inline">(Ctrl+Enter to Run)</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleRunVisibleCode(currentQ)}
+                          disabled={codeRunning}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--accent-primary)] text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition cursor-pointer shadow-xs"
+                        >
+                          <Play className="w-3.5 h-3.5" /> {codeRunning ? "Running..." : "Run Code"}
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Monaco Code Editor Component */}
-                    <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--bg-base)]">
+                    <div className="h-[380px] rounded-lg overflow-hidden border border-[var(--border-subtle)]">
                       <CodeEditor
                         code={currentAnswer.submitted_code || ""}
                         onChange={(val) => handleCodeChange(currentQ.question_id, val, currentAnswer.submitted_language || "python")}
                         language={currentAnswer.submitted_language || "python"}
                         onLanguageChange={(newLang) => handleCodeChange(currentQ.question_id, currentAnswer.submitted_code || "", newLang)}
-                        height="360px"
+                        onRun={() => handleRunVisibleCode(currentQ)}
                       />
                     </div>
 
-                    {/* Visible Test Cases & Execution Runner */}
-                    <div className="space-y-3 pt-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <Terminal className="w-4 h-4 text-[var(--accent-primary)]" />
-                          <span className="text-xs font-bold text-[var(--text-secondary)] uppercase">Sample Test Cases</span>
+                    {/* Bottom Console Panel (Tabs: Sample Cases, Custom Input, Output) */}
+                    <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden space-y-0">
+                      {/* Console Tabs Header */}
+                      <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--bg-base)] border-b border-[var(--border-subtle)] text-xs">
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setCustomInput("")}
+                            className={`px-2.5 py-1 rounded-md font-medium text-xs transition ${
+                              customInput === "" ? "bg-[var(--bg-surface)] text-[var(--text-primary)] font-bold shadow-xs border border-[var(--border-subtle)]" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                            }`}
+                          >
+                            Sample Test Cases
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (customInput === "") setCustomInput(" ");
+                            }}
+                            className={`px-2.5 py-1 rounded-md font-medium text-xs transition ${
+                              customInput !== "" ? "bg-[var(--bg-surface)] text-[var(--text-primary)] font-bold shadow-xs border border-[var(--border-subtle)]" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                            }`}
+                          >
+                            Custom Input (stdin)
+                          </button>
                         </div>
-                        <button
-                          onClick={() => handleRunVisibleCode(currentQ)}
-                          disabled={codeRunning}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition cursor-pointer shadow-xs"
-                        >
-                          <Play className="w-3.5 h-3.5" /> {codeRunning ? "Executing..." : "Run Code"}
-                        </button>
+                        <span className="text-[10px] font-mono text-[var(--text-muted)] hidden sm:inline">
+                          Isolated Sandbox Execution
+                        </span>
                       </div>
 
-                      {currentQ.visible_test_cases && currentQ.visible_test_cases.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {currentQ.visible_test_cases.map((tc, idx) => (
-                            <div key={idx} className="p-3 rounded-lg bg-[var(--bg-base)] border border-[var(--border-subtle)] space-y-1.5 text-xs font-mono">
-                              <span className="text-[10px] font-bold text-[var(--text-muted)]">Sample #{idx + 1}</span>
-                              <div>
-                                <span className="text-[10px] text-[var(--text-secondary)] block font-sans">Input:</span>
-                                <pre className="bg-[var(--bg-surface)] p-1.5 rounded border border-[var(--border-subtle)] text-[11px] overflow-x-auto">{tc.input_data}</pre>
-                              </div>
-                              <div>
-                                <span className="text-[10px] text-[var(--text-secondary)] block font-sans">Expected Output:</span>
-                                <pre className="bg-[var(--bg-surface)] p-1.5 rounded border border-[var(--border-subtle)] text-[11px] overflow-x-auto">{tc.expected_output}</pre>
-                              </div>
+                      {/* Tab 1: Sample Test Cases */}
+                      {customInput === "" && (
+                        <div className="p-3.5 space-y-3">
+                          {currentQ.visible_test_cases && currentQ.visible_test_cases.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {currentQ.visible_test_cases.map((tc, idx) => (
+                                <div key={idx} className="p-3 rounded-lg bg-[var(--bg-base)] border border-[var(--border-subtle)] space-y-1.5 text-xs font-mono">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-[var(--text-muted)]">Example Case #{idx + 1}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] text-[var(--text-secondary)] block font-sans">Input:</span>
+                                    <pre className="bg-[var(--bg-surface)] p-2 rounded border border-[var(--border-subtle)] text-[11px] overflow-x-auto">{tc.input_data}</pre>
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] text-[var(--text-secondary)] block font-sans">Expected Output:</span>
+                                    <pre className="bg-[var(--bg-surface)] p-2 rounded border border-[var(--border-subtle)] text-[11px] text-[var(--accent-text)] overflow-x-auto">{tc.expected_output}</pre>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          ) : (
+                            <p className="text-xs text-[var(--text-muted)] p-2">Standard problem constraints and hidden evaluation apply for this question.</p>
+                          )}
                         </div>
-                      ) : (
-                        <p className="text-xs text-[var(--text-muted)]">No visible sample test cases for this problem.</p>
                       )}
 
-                      {/* Structured Test Results Component */}
+                      {/* Tab 2: Custom Input */}
+                      {customInput !== "" && (
+                        <div className="p-3.5 space-y-1.5 text-xs">
+                          <label className="block text-[11px] font-semibold text-[var(--text-secondary)]">
+                            Custom Standard Input (stdin):
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={customInput.trim() === "" ? "" : customInput}
+                            onChange={(e) => setCustomInput(e.target.value)}
+                            placeholder="Enter test input data to feed into stdin..."
+                            className="w-full p-2.5 rounded-md font-mono text-xs bg-[var(--bg-base)] border border-[var(--border-subtle)] text-[var(--text-primary)] focus:outline-none"
+                          />
+                        </div>
+                      )}
+
+                      {/* Execution Output Box */}
                       {(codeRunResult || codeRunning) && (
-                        <div className="pt-2">
+                        <div className="p-3.5 border-t border-[var(--border-subtle)]">
                           <TestResults results={codeRunResult} isRunning={codeRunning} />
                         </div>
                       )}

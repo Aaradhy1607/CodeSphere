@@ -426,14 +426,54 @@ def publish_assessment(
 
     now = datetime.datetime.now(datetime.timezone.utc)
     start_t = assessment.start_time.replace(tzinfo=datetime.timezone.utc) if assessment.start_time.tzinfo is None else assessment.start_time
+    end_t = assessment.end_time.replace(tzinfo=datetime.timezone.utc) if assessment.end_time.tzinfo is None else assessment.end_time
 
-    if now >= start_t:
+    if now > end_t:
+        assessment.status = AssessmentStatus.COMPLETED.value
+    elif start_t <= now <= end_t:
         assessment.status = AssessmentStatus.ACTIVE.value
     else:
         assessment.status = AssessmentStatus.SCHEDULED.value
 
+    assessment.updated_at = now
     db.commit()
     return {"message": f"Assessment published successfully with status: {assessment.status}"}
+
+@router.post("/{assessment_id}/close")
+def close_assessment(
+    assessment_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_permission(Permission.EDIT_ASSESSMENT))
+):
+    """
+    Close an assessment to prevent new attempts from starting.
+    """
+    assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found.")
+
+    assessment.status = AssessmentStatus.COMPLETED.value
+    assessment.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    db.commit()
+    return {"message": f"Assessment '{assessment.title}' closed successfully.", "assessment": assessment}
+
+@router.post("/{assessment_id}/archive")
+def archive_assessment(
+    assessment_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_permission(Permission.EDIT_ASSESSMENT))
+):
+    """
+    Archive an assessment.
+    """
+    assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found.")
+
+    assessment.status = AssessmentStatus.ARCHIVED.value
+    assessment.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    db.commit()
+    return {"message": f"Assessment '{assessment.title}' archived successfully.", "assessment": assessment}
 
 # =====================================================================
 # SECURE EXAM SESSION & ATTEMPTS ENDPOINTS
@@ -465,6 +505,7 @@ def start_or_resume_assessment(
     return assessment_service.get_attempt_state(db, attempt.id, current_user)
 
 @router.get("/attempts/{attempt_id}/state")
+@router.get("/attempts/{attempt_id}")
 def get_attempt_state_endpoint(
     attempt_id: str,
     db: Session = Depends(get_db),
@@ -476,6 +517,7 @@ def get_attempt_state_endpoint(
     return assessment_service.get_attempt_state(db, attempt_id, current_user)
 
 @router.post("/attempts/{attempt_id}/answers", response_model=AnswerSaveResponse)
+@router.post("/attempts/{attempt_id}/save-answer", response_model=AnswerSaveResponse)
 def save_attempt_answer(
     attempt_id: str,
     req: AnswerSaveRequest,
@@ -485,11 +527,26 @@ def save_attempt_answer(
     """
     Autosave or explicit save of answer data for a question with idempotency.
     """
+    ans_data = dict(req.answer_data) if req.answer_data else {}
+    if not ans_data:
+        if req.selected_options is not None:
+            ans_data["selected_options"] = req.selected_options
+        if req.selected_option is not None:
+            ans_data["selected_option"] = req.selected_option
+        if req.submitted_code is not None:
+            ans_data["code"] = req.submitted_code
+        if req.submitted_language is not None:
+            ans_data["language"] = req.submitted_language
+        if req.submitted_text is not None:
+            ans_data["text"] = req.submitted_text
+        if req.time_spent_seconds is not None:
+            ans_data["time_spent_seconds"] = req.time_spent_seconds
+
     success, saved_at, version = assessment_service.save_answer(
         db=db,
         attempt_id=attempt_id,
         question_id=req.question_id,
-        answer_data=req.answer_data,
+        answer_data=ans_data,
         is_flagged=bool(req.is_flagged),
         user=current_user
     )
@@ -503,6 +560,7 @@ def save_attempt_answer(
     )
 
 @router.post("/attempts/{attempt_id}/events", response_model=AntiCheatEventOut)
+@router.post("/attempts/{attempt_id}/anti-cheat-event", response_model=AntiCheatEventOut)
 def log_anti_cheat_event(
     attempt_id: str,
     req: AntiCheatEventCreate,
@@ -512,12 +570,16 @@ def log_anti_cheat_event(
     """
     Logs an immutable anti-cheat audit event (tab switch, copy/paste, fullscreen exit, etc.).
     """
+    meta = dict(req.metadata_json or {})
+    if req.event_data:
+        meta.update(req.event_data)
+
     event = assessment_service.record_anti_cheat_event(
         db=db,
         attempt_id=attempt_id,
         event_type=req.event_type,
         severity=req.severity or "INFO",
-        metadata_json=req.metadata_json or {},
+        metadata_json=meta,
         user=current_user
     )
 
@@ -530,6 +592,33 @@ def log_anti_cheat_event(
         metadata_json=event.metadata_json or {},
         timestamp=event.timestamp
     )
+
+@router.get("/attempts/{attempt_id}/events", response_model=List[AntiCheatEventOut])
+@router.get("/attempts/{attempt_id}/anti-cheat-events", response_model=List[AntiCheatEventOut])
+def get_attempt_events(
+    attempt_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Retrieve all anti-cheat events recorded for an attempt.
+    """
+    attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found.")
+
+    is_owner = (attempt.candidate_id == current_user.id)
+    is_staff = (current_user.role in ["ADMIN", "SUPER_ADMIN", "FACULTY", "PLACEMENT_ADMIN"])
+    if not is_owner and not is_staff:
+        raise HTTPException(status_code=403, detail="Unauthorized to view attempt events.")
+
+    events = (
+        db.query(AntiCheatEvent)
+        .filter(AntiCheatEvent.attempt_id == attempt_id)
+        .order_by(AntiCheatEvent.timestamp.asc())
+        .all()
+    )
+    return events
 
 @router.post("/attempts/{attempt_id}/heartbeat", response_model=HeartbeatResponse)
 def attempt_heartbeat(
@@ -883,6 +972,7 @@ def get_assessment_monitor_dashboard(
     )
 
 @router.post("/attempts/{attempt_id}/action")
+@router.post("/attempts/{attempt_id}/admin-action")
 def admin_attempt_action(
     attempt_id: str,
     req: AdminAttemptActionRequest,

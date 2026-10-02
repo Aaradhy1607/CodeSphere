@@ -34,8 +34,8 @@ int main() { int x = 0; if (scanf("%d", &x) == 1) printf("%d\\n", x + 1); return
             test_code = """#include <iostream>
 int main() { int x = 0; if (std::cin >> x) std::cout << (x + 1) << std::endl; return 0; }
 """
-        res = code_runner.evaluate_test_cases(test_code, lang, [{"id": 1, "input_data": "1\n", "expected_output": "2", "points": 10, "is_hidden": False}])
-        return res.get("verdict") == SubmissionVerdict.AC
+        res = code_runner.execute_single(test_code, lang, "1", timeout_seconds=5.0)
+        return res.get("verdict") in (SubmissionVerdict.AC, SubmissionVerdict.AC.value)
     except Exception:
         return False
 
@@ -44,25 +44,24 @@ int main() { int x = 0; if (std::cin >> x) std::cout << (x + 1) << std::endl; re
 def test_python_execution():
     code = "import sys\nprint(int(sys.stdin.read().strip()) * 2)"
     res = code_runner.execute_single(code, "python", "21")
-    assert res["verdict"] == SubmissionVerdict.AC
+    assert res["verdict"] in (SubmissionVerdict.AC, SubmissionVerdict.AC.value)
     assert res["output"].strip() == "42"
 
 def test_cpp_execution():
     if not _is_compiler_available("g++"):
         pytest.skip("g++ compiler not available or functional on host environment")
-    code = """
-    #include <iostream>
-    using namespace std;
-    int main() {
-        int x;
-        if (cin >> x) {
-            cout << x * 3 << endl;
-        }
-        return 0;
+    code = """#include <iostream>
+using namespace std;
+int main() {
+    int x;
+    if (cin >> x) {
+        cout << x * 3 << endl;
     }
-    """
-    res = code_runner.execute_single(code, "cpp", "10")
-    assert res["verdict"] == SubmissionVerdict.AC
+    return 0;
+}
+"""
+    res = code_runner.execute_single(code, "cpp", "10", timeout_seconds=5.0)
+    assert res["verdict"] in (SubmissionVerdict.AC, SubmissionVerdict.AC.value)
     assert res["output"].strip() == "30"
 
 def test_c_execution():
@@ -78,8 +77,8 @@ def test_c_execution():
         return 0;
     }
     """
-    res = code_runner.execute_single(code, "c", "15")
-    assert res["verdict"] == SubmissionVerdict.AC
+    res = code_runner.execute_single(code, "c", "15", timeout_seconds=5.0)
+    assert res["verdict"] in (SubmissionVerdict.AC, SubmissionVerdict.AC.value)
     assert res["output"].strip() == "20"
 
 

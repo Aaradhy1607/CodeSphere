@@ -242,6 +242,7 @@ class SubmissionStatus(str, enum.Enum):
     CANCELLED = "CANCELLED"
 
 class TestCaseCategory(str, enum.Enum):
+    __test__ = False
     NORMAL = "NORMAL"
     BOUNDARY = "BOUNDARY"
     MINIMUM = "MINIMUM"
@@ -519,6 +520,7 @@ class QuestionFeedback(Base):
     user = relationship("User")
 
 class TestCase(Base):
+    __test__ = False
     __tablename__ = "test_cases"
     __table_args__ = (
         Index("ix_test_cases_qid_hidden", "question_id", "is_hidden"),

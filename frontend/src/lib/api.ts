@@ -3,7 +3,7 @@ import type {
   Submission, LeaderboardEntry, LifetimeLeaderboardEntry, StudentReport, PlacementAnalytics, StudentComparison,
   DuplicateCheckResult, QuestionVersion, QuestionAnalytics, QuestionFeedback,
   Assessment, AttemptState, AnswerSaveRequest, AnswerSaveResponse, AntiCheatEventCreate, AntiCheatEventOut, AttemptStatus,
-  AssessmentResultDetail, MonitorDashboard
+  AssessmentResultDetail, MonitorDashboard, AsyncSubmitResult, SubmissionStatusOut, StudentSubmissionHistoryOut
 } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
@@ -326,6 +326,15 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ event_id, question_id, code, language })
       }),
+    submitAsync: (event_id: number, question_id: number, code: string, language: string) =>
+      request<AsyncSubmitResult>("/execute/submit-async", {
+        method: "POST",
+        body: JSON.stringify({ event_id, question_id, code, language })
+      }),
+    getStatus: (submission_id: number) =>
+      request<SubmissionStatusOut>(`/execute/status/${submission_id}`),
+    getHistory: (question_id: number) =>
+      request<StudentSubmissionHistoryOut>(`/execute/my-submission-history/${question_id}`),
     getMySubmission: (event_id: number, question_id: number) =>
       request<Submission | null>(`/execute/my-submission/${event_id}/${question_id}`)
   },

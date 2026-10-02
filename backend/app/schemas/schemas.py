@@ -734,11 +734,19 @@ class AttemptStateOut(BaseModel):
     anti_cheat_policy: Dict[str, Any]
     integrity_score: float
     session_token: str
+    current_session_token: Optional[str] = None
+    tab_switch_count: Optional[int] = 0
 
 class AnswerSaveRequest(BaseModel):
     question_id: int
-    answer_data: Dict[str, Any]
+    answer_data: Optional[Dict[str, Any]] = None
+    selected_options: Optional[List[str]] = None
+    selected_option: Optional[str] = None
+    submitted_code: Optional[str] = None
+    submitted_language: Optional[str] = None
+    submitted_text: Optional[str] = None
     is_flagged: Optional[bool] = False
+    time_spent_seconds: Optional[float] = None
     client_timestamp: Optional[datetime] = None
 
 class AnswerSaveResponse(BaseModel):
@@ -752,6 +760,7 @@ class AntiCheatEventCreate(BaseModel):
     event_type: str
     severity: Optional[str] = "INFO"
     metadata_json: Optional[Dict[str, Any]] = None
+    event_data: Optional[Dict[str, Any]] = None
     client_timestamp: Optional[datetime] = None
 
 class AntiCheatEventOut(BaseModel):
@@ -774,11 +783,13 @@ class HeartbeatResponse(BaseModel):
     remaining_seconds: int
     status: str
     integrity_score: float
+    is_active: Optional[bool] = True
     terminated: bool = False
     termination_reason: Optional[str] = None
 
 class AssessmentSubmitRequest(BaseModel):
     final_sync: Optional[Dict[str, Any]] = None
+    final_sync_answers: Optional[Any] = None
 
 class AssessmentResultOut(BaseModel):
     id: int
