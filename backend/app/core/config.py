@@ -67,6 +67,16 @@ class Settings(BaseSettings):
     JUDGE0_API_URL: str = os.getenv("JUDGE0_API_URL", "https://judge0-ce.p.rapidapi.com")
     JUDGE0_API_KEY: str = os.getenv("JUDGE0_API_KEY", "")
     
+    # Execution Isolation & Sandboxing
+    CODESPHERE_EXECUTION_BACKEND: str = os.getenv("CODESPHERE_EXECUTION_BACKEND", "local")
+    REQUIRE_DOCKER_SANDBOX: bool = os.getenv("REQUIRE_DOCKER_SANDBOX", "False").lower() in ("true", "1", "yes")
+    ALLOW_LOCAL_PROCESS_FALLBACK: bool = os.getenv("ALLOW_LOCAL_PROCESS_FALLBACK", "True").lower() in ("true", "1", "yes")
+    
+    # Seeder Configuration
+    SEED_DEMO_DATA: bool = os.getenv("SEED_DEMO_DATA", "False" if os.getenv("ENVIRONMENT", "development").lower() in ("production", "prod", "staging") else "True").lower() in ("true", "1", "yes")
+    SEED_STUDENT_PASSWORD: str = os.getenv("SEED_STUDENT_PASSWORD", "student123")
+    SEED_STAFF_PASSWORD: str = os.getenv("SEED_STAFF_PASSWORD", "faculty123")
+
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
@@ -76,5 +86,43 @@ class Settings(BaseSettings):
         "*"
     ]
 
+    def validate_production_security(self):
+        """
+        Validates production configuration fail-fast invariants.
+        Raises RuntimeError if insecure defaults or missing secrets are detected.
+        """
+        is_prod = self.ENVIRONMENT.lower() in ("production", "prod", "staging")
+        if not is_prod:
+            return
+
+        insecure_secrets = [
+            "codesphere-usar-super-secret-jwt-key-2026-production-ready",
+            "secret",
+            "changeme",
+            "password",
+            "admin123",
+            "123456"
+        ]
+
+        if not self.SECRET_KEY or self.SECRET_KEY in insecure_secrets or len(self.SECRET_KEY) < 32:
+            raise RuntimeError(
+                "FATAL CONFIGURATION ERROR: A strong, unique SECRET_KEY (at least 32 characters) "
+                "must be configured via environment variables for production deployments."
+            )
+
+        if self.DATABASE_URL.startswith("sqlite"):
+            raise RuntimeError(
+                "FATAL CONFIGURATION ERROR: SQLite database cannot be used in a production or staging environment. "
+                "Please configure a valid PostgreSQL connection in DATABASE_URL."
+            )
+
+        insecure_passwords = ["admin123", "password", "123456", "admin", "codesphere"]
+        if self.INITIAL_ADMIN_PASSWORD in insecure_passwords:
+            raise RuntimeError(
+                "FATAL CONFIGURATION ERROR: Insecure INITIAL_ADMIN_PASSWORD detected in production. "
+                "You must set a strong, unique initial password via environment variables."
+            )
+
 settings = Settings()
+settings.validate_production_security()
 

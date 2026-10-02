@@ -81,11 +81,46 @@ class BaseExecutionBackend(ABC):
         pass
 
 
+def measure_process_peak_memory_kb(proc: subprocess.Popen) -> float:
+    """
+    Measures process peak working set / pagefile usage on Windows using ctypes GetProcessMemoryInfo.
+    Returns 0.0 if measurement is unsupported on the platform.
+    """
+    if not proc:
+        return 0.0
+    if os.name == 'nt' and hasattr(proc, '_handle') and proc._handle:
+        try:
+            import ctypes
+            import ctypes.wintypes
+            class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+                _fields_ = [
+                    ('cb', ctypes.wintypes.DWORD),
+                    ('PageFaultCount', ctypes.wintypes.DWORD),
+                    ('PeakWorkingSetSize', ctypes.c_size_t),
+                    ('WorkingSetSize', ctypes.c_size_t),
+                    ('QuotaPeakPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaPeakNonPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaNonPagedPoolUsage', ctypes.c_size_t),
+                    ('PagefileUsage', ctypes.c_size_t),
+                    ('PeakPagefileUsage', ctypes.c_size_t)
+                ]
+            pmc = PROCESS_MEMORY_COUNTERS()
+            pmc.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
+            if ctypes.windll.psapi.GetProcessMemoryInfo(int(proc._handle), ctypes.byref(pmc), pmc.cb):
+                peak_bytes = max(pmc.PeakWorkingSetSize, pmc.PeakPagefileUsage)
+                return round(peak_bytes / 1024.0, 2)
+        except Exception:
+            pass
+    return 0.0
+
+
 class LocalProcessBackend(BaseExecutionBackend):
     """
     Development Fallback OS Process Execution Backend.
     Provides local subprocess execution with sanitized environment variables (stripping secrets),
-    process tree cleanup, bounded stdout/stderr streaming (OLE protection), and timeout enforcement.
+    process tree cleanup, bounded stdout/stderr streaming (OLE protection), real peak memory telemetry,
+    and timeout enforcement.
     NOTE: Does not provide full kernel-level isolation or cgroups guarantees. Use DockerExecutionBackend
     for production sandboxing.
     """
@@ -181,6 +216,11 @@ class LocalProcessBackend(BaseExecutionBackend):
             preexec = os.setsid
 
         proc = None
+        stdout_chunks: List[bytes] = []
+        stderr_chunks: List[bytes] = []
+        total_out_bytes = 0
+        ole_triggered = False
+
         try:
             proc = subprocess.Popen(
                 session.cmd,
@@ -193,22 +233,97 @@ class LocalProcessBackend(BaseExecutionBackend):
                 creationflags=creationflags
             )
 
-            stdout_data, stderr_data = proc.communicate(input=input_bytes, timeout=timeout_seconds)
-            elapsed_ms = (time.time() - start_time) * 1000.0
+            def read_stdout():
+                nonlocal total_out_bytes, ole_triggered
+                try:
+                    while True:
+                        chunk = proc.stdout.read(4096)
+                        if not chunk:
+                            break
+                        total_out_bytes += len(chunk)
+                        if total_out_bytes > MAX_OUTPUT_BYTES:
+                            ole_triggered = True
+                            self._kill_process_tree(proc)
+                            break
+                        stdout_chunks.append(chunk)
+                except Exception:
+                    pass
 
-            # Check Output Limit Exceeded (OLE)
-            if len(stdout_data) > MAX_OUTPUT_BYTES:
-                truncated = stdout_data[:MAX_OUTPUT_BYTES].decode("utf-8", errors="replace")
+            def read_stderr():
+                try:
+                    while True:
+                        chunk = proc.stderr.read(4096)
+                        if not chunk:
+                            break
+                        stderr_chunks.append(chunk)
+                        if sum(len(c) for c in stderr_chunks) > MAX_OUTPUT_BYTES:
+                            break
+                except Exception:
+                    pass
+
+            t_out = threading.Thread(target=read_stdout, daemon=True)
+            t_err = threading.Thread(target=read_stderr, daemon=True)
+            t_out.start()
+            t_err.start()
+
+            try:
+                if proc.stdin:
+                    proc.stdin.write(input_bytes)
+                    proc.stdin.flush()
+                    proc.stdin.close()
+            except Exception:
+                pass
+
+            t_out.join(timeout=timeout_seconds)
+            t_err.join(timeout=timeout_seconds)
+
+            if t_out.is_alive() or t_err.is_alive():
+                self._kill_process_tree(proc)
+                return {
+                    "verdict": SubmissionVerdict.TLE,
+                    "output": "",
+                    "error": f"Time Limit Exceeded (> {timeout_seconds}s)",
+                    "time_ms": timeout_seconds * 1000.0,
+                    "memory_kb": 0.0
+                }
+
+            try:
+                proc.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                self._kill_process_tree(proc)
+                return {
+                    "verdict": SubmissionVerdict.TLE,
+                    "output": "",
+                    "error": f"Time Limit Exceeded (> {timeout_seconds}s)",
+                    "time_ms": timeout_seconds * 1000.0,
+                    "memory_kb": 0.0
+                }
+
+            elapsed_ms = (time.time() - start_time) * 1000.0
+            peak_mem_kb = measure_process_peak_memory_kb(proc)
+
+            if ole_triggered or total_out_bytes > MAX_OUTPUT_BYTES:
+                truncated = b"".join(stdout_chunks)[:MAX_OUTPUT_BYTES].decode("utf-8", errors="replace")
                 return {
                     "verdict": SubmissionVerdict.OLE,
                     "output": truncated,
                     "error": f"Output Limit Exceeded (> {MAX_OUTPUT_BYTES // 1024} KB)",
                     "time_ms": elapsed_ms,
-                    "memory_kb": 0.0
+                    "memory_kb": peak_mem_kb
                 }
 
-            raw_out = stdout_data.decode("utf-8", errors="replace")
-            raw_err = stderr_data.decode("utf-8", errors="replace")
+            raw_out = b"".join(stdout_chunks).decode("utf-8", errors="replace")
+            raw_err = b"".join(stderr_chunks).decode("utf-8", errors="replace")
+
+            # Check Memory Limit Exceeded (MLE) if peak measurement exceeds limit
+            if memory_limit_mb > 0 and peak_mem_kb > (memory_limit_mb * 1024.0):
+                return {
+                    "verdict": SubmissionVerdict.MLE,
+                    "output": raw_out,
+                    "error": f"Memory Limit Exceeded (> {memory_limit_mb} MB)",
+                    "time_ms": elapsed_ms,
+                    "memory_kb": peak_mem_kb
+                }
 
             if proc.returncode != 0:
                 return {
@@ -216,7 +331,7 @@ class LocalProcessBackend(BaseExecutionBackend):
                     "output": raw_out,
                     "error": raw_err.strip() or f"Process exited with non-zero code {proc.returncode}",
                     "time_ms": elapsed_ms,
-                    "memory_kb": 0.0
+                    "memory_kb": peak_mem_kb
                 }
 
             return {
@@ -224,16 +339,12 @@ class LocalProcessBackend(BaseExecutionBackend):
                 "output": raw_out,
                 "error": None,
                 "time_ms": elapsed_ms,
-                "memory_kb": 0.0
+                "memory_kb": peak_mem_kb
             }
 
         except subprocess.TimeoutExpired:
             if proc:
                 self._kill_process_tree(proc)
-                try:
-                    proc.communicate(timeout=1.0)
-                except Exception:
-                    pass
             return {
                 "verdict": SubmissionVerdict.TLE,
                 "output": "",
@@ -309,8 +420,17 @@ class DockerExecutionBackend(BaseExecutionBackend):
                 "backend": "docker" if self._docker_available else "local_process"
             }
 
-        # If Docker daemon is unavailable, delegate cleanly to hardened local process runner
+        # If Docker daemon is unavailable, delegate cleanly or fail closed based on policy
         if not self._docker_available:
+            if settings.REQUIRE_DOCKER_SANDBOX and not settings.ALLOW_LOCAL_PROCESS_FALLBACK:
+                return {
+                    "verdict": SubmissionVerdict.RE,
+                    "output": "",
+                    "error": "Execution rejected: Docker container sandboxing is mandatory in this production environment, but the Docker daemon is unreachable.",
+                    "time_ms": 0.0,
+                    "memory_kb": 0.0,
+                    "backend": "docker_unavailable_fail_closed"
+                }
             res = self.fallback.execute(session, input_data, timeout_seconds, memory_limit_mb)
             res["backend"] = "local_process_fallback"
             return res
@@ -493,10 +613,10 @@ class SandboxedCodeRunner:
         self.timeout_seconds = settings.CODE_RUNNER_TIMEOUT_SECONDS
         self.is_windows = (os.name == 'nt')
         self.semaphore = threading.BoundedSemaphore(settings.CODE_RUNNER_MAX_CONCURRENCY)
-        backend_choice = os.environ.get("CODESPHERE_EXECUTION_BACKEND", "local").lower()
+        backend_choice = getattr(settings, "CODESPHERE_EXECUTION_BACKEND", "local").lower()
         if backend:
             self.backend = backend
-        elif backend_choice == "docker":
+        elif backend_choice == "docker" or settings.REQUIRE_DOCKER_SANDBOX:
             self.backend = DockerExecutionBackend(fallback_backend=LocalProcessBackend(is_windows=self.is_windows))
         else:
             self.backend = LocalProcessBackend(is_windows=self.is_windows)

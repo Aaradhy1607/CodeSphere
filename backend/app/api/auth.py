@@ -215,10 +215,11 @@ def forgot_password(req: PasswordResetRequest, request: Request, db: Session = D
     else:
         log_audit(db, "PASSWORD_RESET_REQUEST_NOT_FOUND", email_clean, ip_address=ip_address, status="WARNING")
 
-    # Return safe message (includes reset token for dev/institutional testing environments)
+    # Return safe message (includes reset token only in development for automated testing)
+    is_dev = settings.ENVIRONMENT.lower() == "development"
     return {
         "message": "If an account exists with that email address, password reset instructions have been generated.",
-        "reset_token": raw_token, # Available in development for automated verification and evaluation
+        "reset_token": raw_token if is_dev else None,
         "expires_in_minutes": settings.PASSWORD_RESET_EXPIRE_MINUTES
     }
 
@@ -567,9 +568,14 @@ def remove_admin_from_allowlist(
     log_audit(db, "ADMIN_ALLOWLIST_REMOVED", admin.email, user_id=admin.id, ip_address=ip_address, status="SUCCESS", details={"target_email": admin_entry.email})
     return {"message": f"Administrator authorization for '{admin_entry.email}' revoked."}
 
-# ================= FAST DEMO USER SELECTION (ALL 7 ROLES SUPPORTED) =================
+# ================= FAST DEMO USER SELECTION (DEVELOPMENT ONLY) =================
 @router.get("/demo-users")
 def get_demo_users(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+    if settings.ENVIRONMENT.lower() in ("production", "prod", "staging"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Demo user switching is disabled in production environments."
+        )
     users = db.query(User).all()
     demo_list = []
     for u in users:
@@ -590,6 +596,11 @@ def get_demo_users(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
 
 @router.post("/demo-switch", response_model=Token)
 def switch_demo_user(req: DemoSwitchRequest, db: Session = Depends(get_db)):
+    if settings.ENVIRONMENT.lower() in ("production", "prod", "staging"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Demo user switching is disabled in production environments."
+        )
     query = db.query(User)
     if req.user_id:
         user = query.filter(User.id == req.user_id).first()

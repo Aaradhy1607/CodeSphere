@@ -64,19 +64,22 @@ def create_student(
     enrollment_no: str,
     branch: str,
     academic_year: int,
+    password: Optional[str] = None,
     db: Session = Depends(get_db),
     admin: User = Depends(require_permission(Permission.MANAGE_STUDENTS))
 ):
+    import secrets
     email_clean = email.strip().lower()
     existing = db.query(User).filter(User.email == email_clean).first()
     if existing:
         raise HTTPException(status_code=400, detail="A student with this college email already exists.")
 
+    initial_password = password if password else secrets.token_urlsafe(16)
     user = User(
         email=email_clean,
         full_name=name.strip(),
         role=UserRole.STUDENT.value,
-        hashed_password=get_password_hash("student123"),
+        hashed_password=get_password_hash(initial_password),
         is_active=True
     )
     db.add(user)

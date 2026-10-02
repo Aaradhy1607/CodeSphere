@@ -7,9 +7,48 @@ from app.core.config import settings
 from app.core.security import get_password_hash
 
 def seed_database(db: Session):
-    # 1. ADMIN & STAFF ALLOWLIST
+    is_prod = settings.ENVIRONMENT.lower() in ("production", "prod", "staging")
+
+    # 1. INITIAL SUPER ADMIN BOOTSTRAP (Required in all environments)
+    initial_admin_email = settings.INITIAL_ADMIN_EMAIL.strip().lower()
+    admin_allowlist_entry = db.query(AdminAllowlist).filter(AdminAllowlist.email == initial_admin_email).first()
+    if not admin_allowlist_entry:
+        db.add(AdminAllowlist(
+            email=initial_admin_email,
+            name=settings.INITIAL_ADMIN_NAME,
+            assigned_role=UserRole.SUPER_ADMIN.value,
+            added_by="SYSTEM_BOOTSTRAP",
+            is_active=True
+        ))
+    else:
+        admin_allowlist_entry.assigned_role = UserRole.SUPER_ADMIN.value
+    db.flush()
+
+    initial_admin = db.query(User).filter(User.email == initial_admin_email).first()
+    if not initial_admin:
+        initial_admin = User(
+            email=initial_admin_email,
+            full_name=settings.INITIAL_ADMIN_NAME,
+            role=UserRole.SUPER_ADMIN.value,
+            status=AccountStatus.ACTIVE.value,
+            hashed_password=get_password_hash(settings.INITIAL_ADMIN_PASSWORD),
+            avatar_url="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+            is_active=True
+        )
+        db.add(initial_admin)
+        db.flush()
+
+    # In production, stop here. Do NOT seed universal demo staff or student credentials.
+    if is_prod or not settings.SEED_DEMO_DATA:
+        db.commit()
+        print(f"[CodeSphere Seeder] Production initialization complete. Primary administrator: {initial_admin_email}")
+        return
+
+    # 2. DEVELOPMENT-ONLY DEMO ACCOUNTS & STAFF ALLOWLIST
+    dev_staff_password = settings.SEED_STAFF_PASSWORD
+    dev_student_password = settings.SEED_STUDENT_PASSWORD
+
     staff_allowlist = [
-        {"email": settings.INITIAL_ADMIN_EMAIL.lower(), "name": settings.INITIAL_ADMIN_NAME, "role": UserRole.SUPER_ADMIN.value},
         {"email": "admin@ipu.ac.in", "name": "Placement Cell Operations Admin", "role": UserRole.ADMIN.value},
         {"email": "tnp.officer@ipu.ac.in", "name": "USAR Placement Head", "role": UserRole.PLACEMENT_ADMIN.value},
         {"email": "faculty.sharma@ipu.ac.in", "name": "Prof. Rajesh Sharma (Faculty Advisor)", "role": UserRole.FACULTY.value},
@@ -30,55 +69,47 @@ def seed_database(db: Session):
             existing.assigned_role = entry["role"]
     db.flush()
 
-    # 2. SEED USERS FOR EACH ROLE
     users_to_seed = [
-        {
-            "email": settings.INITIAL_ADMIN_EMAIL.lower(),
-            "full_name": settings.INITIAL_ADMIN_NAME,
-            "role": UserRole.SUPER_ADMIN.value,
-            "password": settings.INITIAL_ADMIN_PASSWORD,
-            "avatar_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"
-        },
         {
             "email": "admin@ipu.ac.in",
             "full_name": "Placement Operations Admin",
             "role": UserRole.ADMIN.value,
-            "password": "admin123",
+            "password": dev_staff_password,
             "avatar_url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150"
         },
         {
             "email": "tnp.officer@ipu.ac.in",
             "full_name": "USAR Placement Coordinator",
             "role": UserRole.PLACEMENT_ADMIN.value,
-            "password": "admin123",
+            "password": dev_staff_password,
             "avatar_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150"
         },
         {
             "email": "faculty.sharma@ipu.ac.in",
             "full_name": "Prof. Rajesh Sharma",
             "role": UserRole.FACULTY.value,
-            "password": "faculty123",
+            "password": dev_staff_password,
             "avatar_url": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150"
         },
         {
             "email": "setter.ai@ipu.ac.in",
             "full_name": "Dr. Neha Verma",
             "role": UserRole.QUESTION_SETTER.value,
-            "password": "setter123",
+            "password": dev_staff_password,
             "avatar_url": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150"
         },
         {
             "email": "reviewer.cs@ipu.ac.in",
             "full_name": "Dr. Vikram Mehta",
             "role": UserRole.REVIEWER.value,
-            "password": "reviewer123",
+            "password": dev_staff_password,
             "avatar_url": "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150"
         },
         {
             "email": "aarav.patel@std.ggsipu.ac.in",
             "full_name": "Aarav Patel",
             "role": UserRole.STUDENT.value,
-            "password": "student123",
+            "password": dev_student_password,
             "avatar_url": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150",
             "profile": {
                 "enrollment_no": "001USAR2023",
@@ -90,7 +121,7 @@ def seed_database(db: Session):
             "email": "diya.sharma@std.ggsipu.ac.in",
             "full_name": "Diya Sharma",
             "role": UserRole.STUDENT.value,
-            "password": "student123",
+            "password": dev_student_password,
             "avatar_url": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
             "profile": {
                 "enrollment_no": "002USAR2022",
@@ -126,13 +157,9 @@ def seed_database(db: Session):
                 )
                 db.add(profile)
         else:
-            # Ensure role and status are up to date
             existing_u.role = u_data["role"]
             existing_u.status = AccountStatus.ACTIVE.value
             existing_u.is_active = True
-            # Update password hash if legacy
-            if u_data["password"] and not existing_u.hashed_password.startswith("$2b$"):
-                existing_u.hashed_password = get_password_hash(u_data["password"])
     
     db.commit()
-    print("[CodeSphere] Database successfully seeded with RBAC roles (SUPER_ADMIN, ADMIN, PLACEMENT_ADMIN, FACULTY, QUESTION_SETTER, REVIEWER, STUDENT).")
+    print("[CodeSphere] Development database seeded with test accounts.")

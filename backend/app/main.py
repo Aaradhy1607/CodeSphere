@@ -197,12 +197,23 @@ def liveness_probe():
 
 @app.get("/health/readiness")
 def readiness_probe():
-    """Readiness probe: validates critical dependencies (PostgreSQL/SQLite, Redis/Cache, Worker)."""
+    """Readiness probe: validates critical dependencies (Database, Cache, Worker, Judge Queue, Sandbox)."""
     db_status = check_db_health()
     cache_status = cache.check_health()
     worker_stats = task_worker.get_stats()
+    judge_metrics = judge_queue_manager.metrics.get_snapshot()
     
-    is_ready = db_status.get("status") == "HEALTHY"
+    from app.services.code_runner import code_runner
+    is_docker = hasattr(code_runner.backend, "is_docker_active") and code_runner.backend.is_docker_active()
+    backend_name = "docker" if is_docker else "local_process"
+    
+    # Check readiness conditions
+    db_ready = db_status.get("status") == "HEALTHY"
+    docker_requirement_met = True
+    if settings.REQUIRE_DOCKER_SANDBOX and not settings.ALLOW_LOCAL_PROCESS_FALLBACK and not is_docker:
+        docker_requirement_met = False
+
+    is_ready = db_ready and docker_requirement_met
     overall_status = "READY" if is_ready else "UNREADY"
     
     return {
@@ -211,6 +222,14 @@ def readiness_probe():
         "database": db_status,
         "cache": cache_status,
         "worker": worker_stats,
+        "judge_queue": {
+            "queued": judge_metrics["queued_submissions"],
+            "running": judge_metrics["running_submissions"],
+            "active_workers": len(judge_queue_manager._workers),
+            "backend": backend_name,
+            "docker_available": bool(is_docker),
+            "require_docker": settings.REQUIRE_DOCKER_SANDBOX
+        },
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
     }
 
@@ -222,7 +241,9 @@ def get_metrics():
     uptime = time.time() - START_TIME
     latencies = calculate_percentiles(METRICS["recent_latencies_ms"])
     db_health = check_db_health()
-    
+    from app.services.code_runner import code_runner
+    is_docker = hasattr(code_runner.backend, "is_docker_active") and code_runner.backend.is_docker_active()
+
     return {
         "uptime_seconds": round(uptime, 2),
         "total_requests": METRICS["total_requests"],
@@ -232,7 +253,9 @@ def get_metrics():
         "status_codes": METRICS["status_codes"],
         "database_pool": db_health.get("pool", {}),
         "cache_backend": cache.check_health(),
-        "worker_queue": task_worker.get_stats()
+        "worker_queue": task_worker.get_stats(),
+        "judge_queue": judge_queue_manager.metrics.get_snapshot(),
+        "sandbox_backend": "docker" if is_docker else "local_process"
     }
 
 # CodeSphere Production Readiness Verification 2026

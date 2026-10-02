@@ -6,15 +6,15 @@ services:
     container_name: codesphere-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: codesphere_admin
-      POSTGRES_PASSWORD: codesphere_secure_password_2026
-      POSTGRES_DB: codesphere_production
+      POSTGRES_USER: ${POSTGRES_USER:-codesphere_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Database password required}
+      POSTGRES_DB: ${POSTGRES_DB:-codesphere_production}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U codesphere_admin -d codesphere_production"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codesphere_admin} -d ${POSTGRES_DB:-codesphere_production}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -40,23 +40,28 @@ services:
     container_name: codesphere-backend
     restart: unless-stopped
     environment:
-      ENVIRONMENT: production
-      DATABASE_URL: postgresql://codesphere_admin:codesphere_secure_password_2026@postgres:5432/codesphere_production
-      REDIS_URL: redis://redis:6379/0
-      DB_POOL_SIZE: 20
-      DB_MAX_OVERFLOW: 40
-      DB_POOL_TIMEOUT: 30
-      DB_POOL_RECYCLE: 1800
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-codesphere_admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-codesphere_production}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-40}
+      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
+      DB_POOL_RECYCLE: ${DB_POOL_RECYCLE:-1800}
       DB_POOL_PRE_PING: "True"
       CACHE_ENABLED: "True"
       CACHE_DEFAULT_TTL: 60
       RATE_LIMIT_ENABLED: "True"
-      WORKER_CONCURRENCY: 4
-      CODE_RUNNER_MAX_CONCURRENCY: 8
-      CODE_RUNNER_TIMEOUT_SECONDS: 5.0
-      SECRET_KEY: codesphere-usar-super-secret-jwt-key-2026-production-ready
-      STUDENT_EMAIL_DOMAIN: std.ggsipu.ac.in
-      ADMIN_EMAIL_DOMAIN: ipu.ac.in
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+      CODE_RUNNER_MAX_CONCURRENCY: ${CODE_RUNNER_MAX_CONCURRENCY:-8}
+      CODE_RUNNER_TIMEOUT_SECONDS: ${CODE_RUNNER_TIMEOUT_SECONDS:-5.0}
+      CODESPHERE_EXECUTION_BACKEND: ${CODESPHERE_EXECUTION_BACKEND:-docker}
+      REQUIRE_DOCKER_SANDBOX: ${REQUIRE_DOCKER_SANDBOX:-False}
+      ALLOW_LOCAL_PROCESS_FALLBACK: ${ALLOW_LOCAL_PROCESS_FALLBACK:-True}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY environment variable required}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-placement@ipu.ac.in}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+      STUDENT_EMAIL_DOMAIN: ${STUDENT_EMAIL_DOMAIN:-std.ggsipu.ac.in}
+      ADMIN_EMAIL_DOMAIN: ${ADMIN_EMAIL_DOMAIN:-ipu.ac.in}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     ports:
       - "8000:8000"
@@ -79,7 +84,7 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
     ports:
       - "3000:3000"
     depends_on:

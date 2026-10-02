@@ -121,7 +121,7 @@ export const api = {
     changePassword: (current_password: string, new_password: string) =>
       request<{ message: string }>("/auth/change-password", {
         method: "POST",
-        body: JSON.stringify({ current_password, new_password })
+        body: JSON.stringify({ old_password: current_password, new_password })
       }),
     googleAuth: (email: string, full_name?: string, avatar_url?: string, enrollment_no?: string, branch?: string, academic_year?: number) =>
       request<AuthResponse>("/auth/google", {
@@ -153,10 +153,10 @@ export const api = {
     getAuditLogs: (limit: number = 100) =>
       request<AuditLog[]>(`/auth/audit-logs?limit=${limit}`),
     getAdmins: () => request<any[]>("/auth/admins"),
-    addAdmin: (email: string, name?: string) =>
+    addAdmin: (email: string, name?: string, assigned_role?: string) =>
       request<any>("/auth/admins", {
         method: "POST",
-        body: JSON.stringify({ email, name })
+        body: JSON.stringify({ email, name, assigned_role })
       }),
     removeAdmin: (adminId: number) =>
       request<{ message: string }>(`/auth/admins/${adminId}`, { method: "DELETE" }),

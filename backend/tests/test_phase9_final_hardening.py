@@ -80,26 +80,29 @@ def test_1_staff_multi_role_event_access_and_filtering():
         db.commit()
         db.refresh(event)
 
+        from app.core.cache import invalidate_events_cache
+        invalidate_events_cache()
+
         # Super Admin should see the event
-        res_super = client.get("/api/v1/events/", headers=_get_auth_headers(super_admin))
+        res_super = client.get("/api/v1/events/?limit=200", headers=_get_auth_headers(super_admin))
         assert res_super.status_code == 200
         event_ids_super = [e["id"] for e in res_super.json()]
         assert event.id in event_ids_super
 
         # Placement Admin should see the event
-        res_place = client.get("/api/v1/events/", headers=_get_auth_headers(placement_admin))
+        res_place = client.get("/api/v1/events/?limit=200", headers=_get_auth_headers(placement_admin))
         assert res_place.status_code == 200
         event_ids_place = [e["id"] for e in res_place.json()]
         assert event.id in event_ids_place
 
         # Faculty should see the event
-        res_fac = client.get("/api/v1/events/", headers=_get_auth_headers(faculty))
+        res_fac = client.get("/api/v1/events/?limit=200", headers=_get_auth_headers(faculty))
         assert res_fac.status_code == 200
         event_ids_fac = [e["id"] for e in res_fac.json()]
         assert event.id in event_ids_fac
 
         # AI-ML Student should NOT see the IIOT event
-        res_stu = client.get("/api/v1/events/", headers=_get_auth_headers(student_aiml))
+        res_stu = client.get("/api/v1/events/?limit=200", headers=_get_auth_headers(student_aiml))
         assert res_stu.status_code == 200
         event_ids_stu = [e["id"] for e in res_stu.json()]
         assert event.id not in event_ids_stu
