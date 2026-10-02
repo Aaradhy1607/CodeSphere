@@ -46,7 +46,7 @@ def list_events(
 ):
     _update_event_statuses(db)
     
-    is_admin = current_user.role == UserRole.ADMIN
+    is_staff = current_user.role in [UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value, UserRole.PLACEMENT_ADMIN.value, UserRole.FACULTY.value]
     user_branch = current_user.student_profile.branch if current_user.student_profile else "ALL"
     user_year = current_user.student_profile.academic_year if current_user.student_profile else 0
 
@@ -68,7 +68,7 @@ def list_events(
     result = []
     for e in events:
         # Check target eligibility for students
-        if not is_admin:
+        if not is_staff:
             if e.target_branch != "ALL" and e.target_branch != user_branch:
                 continue
             if e.target_year > 0 and e.target_year != user_year:
@@ -110,7 +110,7 @@ def get_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found.")
 
-    is_admin = current_user.role == UserRole.ADMIN
+    is_staff = current_user.role in [UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value, UserRole.PLACEMENT_ADMIN.value, UserRole.FACULTY.value]
     student_branch = current_user.student_profile.branch if current_user.student_profile else "ALL"
     student_year = current_user.student_profile.academic_year if current_user.student_profile else 0
 
@@ -124,11 +124,11 @@ def get_event(
     )
     
     questions_list = []
-    can_see_solutions = is_admin or event.are_solutions_released
+    can_see_solutions = is_staff or event.are_solutions_released
 
     for eq in eqs:
         # Academic year & branch differentiation filter for students
-        if not is_admin:
+        if not is_staff:
             if eq.year_override > 0 and eq.year_override != student_year:
                 continue
             if eq.branch_override != "ALL" and eq.branch_override != student_branch:

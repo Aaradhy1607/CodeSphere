@@ -127,7 +127,7 @@ def submit_final_code(
         Submission.is_final == True
     ).first()
 
-    if existing and current_user.role != UserRole.ADMIN:
+    if existing and current_user.role not in [UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value]:
         raise HTTPException(
             status_code=400,
             detail="You have already submitted your final solution for this question. Only one final submission is permitted."
@@ -302,7 +302,7 @@ async def submit_code_async(
         Submission.is_final == True
     ).first()
 
-    if existing and current_user.role != UserRole.ADMIN:
+    if existing and current_user.role not in [UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value]:
         raise HTTPException(
             status_code=400,
             detail="You have already submitted your final solution for this question."

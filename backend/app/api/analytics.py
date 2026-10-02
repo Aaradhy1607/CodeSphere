@@ -12,7 +12,7 @@ from app.core.cache import cache
 from app.core.rate_limiter import api_general_rate_limiter
 from app.models.models import (
     User, StudentProfile, Event, Question, Submission, StudentReport, UserRole, SubmissionVerdict,
-    Permission
+    Permission, get_permissions_for_role
 )
 from app.schemas.schemas import PlacementAnalyticsOut, LifetimeLeaderboardEntry, StudentComparisonOut
 
@@ -170,7 +170,13 @@ def get_student_topic_analytics(
     """
     Computes real dynamic topic mastery for a specific student from their historical submissions.
     """
-    if current_user.role != UserRole.ADMIN and current_user.id != user_id:
+    user_perms = get_permissions_for_role(current_user.role)
+    can_view = (
+        Permission.VIEW_PLACEMENT_ANALYTICS in user_perms or
+        Permission.VIEW_ANALYTICS in user_perms or
+        current_user.role in [UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value, UserRole.PLACEMENT_ADMIN.value, UserRole.FACULTY.value]
+    )
+    if not can_view and current_user.id != user_id:
         raise HTTPException(status_code=403, detail="Access denied.")
 
     student_subs = db.query(Submission).filter(

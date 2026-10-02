@@ -239,7 +239,7 @@ export const api = {
     uploadImage: async (file: File): Promise<{ image_url: string; filename: string; size_bytes: number; mime_type: string }> => {
       const formData = new FormData();
       formData.append("file", file);
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const token = typeof window !== "undefined" ? localStorage.getItem("codesphere_token") : null;
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
 

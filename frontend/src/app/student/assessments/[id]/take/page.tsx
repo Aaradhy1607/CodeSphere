@@ -100,7 +100,7 @@ export default function TakeAssessmentPage() {
 
   // 2. Submit Attempt Function
   const handleSubmitExam = async () => {
-    if (!attempt) return;
+    if (!attempt || submitting) return;
     setSubmitting(true);
     try {
       // Build final sync payload
