@@ -1,0 +1,260 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   CodeSphere Institutional Design System Tokens
+   Palette: Oxford Slate + Deep Viridian / Petrol Teal + Warm Stone / Alabaster
+   ========================================================================== */
+
+:root,
+html.light,
+[data-theme="light"] {
+  /* Canvas & Backgrounds */
+  --bg-canvas: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #ffffff;
+  --bg-subtle: #f1f5f9;
+  --bg-hover: #eef2f6;
+  --bg-active: #e2e8f0;
+
+  /* Borders & Dividers */
+  --border-subtle: #e2e8f0;
+  --border-default: #cbd5e1;
+  --border-strong: #94a3b8;
+  --border-focus: #0f766e;
+
+  /* Typography */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+  --text-inverse: #ffffff;
+
+  /* Primary Brand Accent (Oxford Deep Petrol / Teal) */
+  --accent-primary: #0f766e;
+  --accent-hover: #115e59;
+  --accent-active: #134e4a;
+  --accent-subtle: #f0fdfa;
+  --accent-border: #99f6e4;
+  --accent-text: #0f766e;
+
+  /* Status Colors */
+  --status-success-bg: #ecfdf5;
+  --status-success-border: #a7f3d0;
+  --status-success-text: #047857;
+
+  --status-warning-bg: #fffbeb;
+  --status-warning-border: #fde68a;
+  --status-warning-text: #b45309;
+
+  --status-error-bg: #fef2f2;
+  --status-error-border: #fecaca;
+  --status-error-text: #b91c1c;
+
+  --status-info-bg: #f0f9ff;
+  --status-info-border: #bae6fd;
+  --status-info-text: #0369a1;
+
+  /* Academic Disciplines */
+  --discipline-aiml-bg: #f5f3ff;
+  --discipline-aiml-border: #ddd6fe;
+  --discipline-aiml-text: #6d28d9;
+
+  --discipline-aids-bg: #eff6ff;
+  --discipline-aids-border: #bfdbfe;
+  --discipline-aids-text: #1d4ed8;
+
+  --discipline-iiot-bg: #f0fdf4;
+  --discipline-iiot-border: #bbf7d0;
+  --discipline-iiot-text: #15803d;
+
+  --discipline-ar-bg: #fff7ed;
+  --discipline-ar-border: #fed7aa;
+  --discipline-ar-text: #c2410c;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow-card: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+  --shadow-elevated: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  --shadow-modal: 0 20px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
+
+  /* Legacy Compatibility Variables (Auto-mapped to new tokens) */
+  --background: var(--bg-canvas);
+  --foreground: var(--text-primary);
+  --surface: var(--bg-surface);
+  --surface-elevated: var(--bg-subtle);
+  --border: var(--border-subtle);
+  --border-strong: var(--border-default);
+  --muted-foreground: var(--text-muted);
+  --primary: var(--accent-primary);
+  --primary-hover: var(--accent-hover);
+  --success: var(--status-success-text);
+  --warning: var(--status-warning-text);
+  --destructive: var(--status-error-text);
+  --accent-purple: #6d28d9;
+
+  color-scheme: light;
+}
+
+.dark,
+html.dark,
+[data-theme="dark"] {
+  /* Canvas & Backgrounds */
+  --bg-canvas: #090d12;
+  --bg-surface: #0e141c;
+  --bg-surface-elevated: #141c26;
+  --bg-subtle: #141c26;
+  --bg-hover: #1a2432;
+  --bg-active: #222f42;
+
+  /* Borders & Dividers */
+  --border-subtle: #192330;
+  --border-default: #233144;
+  --border-strong: #33455e;
+  --border-focus: #14b8a6;
+
+  /* Typography */
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #8899ac;
+  --text-faint: #53657b;
+  --text-inverse: #090d12;
+
+  /* Primary Brand Accent (Luminescent Deep Teal) */
+  --accent-primary: #14b8a6;
+  --accent-hover: #2dd4bf;
+  --accent-active: #5eead4;
+  --accent-subtle: rgba(20, 184, 166, 0.12);
+  --accent-border: rgba(20, 184, 166, 0.28);
+  --accent-text: #2dd4bf;
+
+  /* Status Colors */
+  --status-success-bg: rgba(16, 185, 129, 0.12);
+  --status-success-border: rgba(16, 185, 129, 0.28);
+  --status-success-text: #34d399;
+
+  --status-warning-bg: rgba(245, 158, 11, 0.12);
+  --status-warning-border: rgba(245, 158, 11, 0.28);
+  --status-warning-text: #fbbf24;
+
+  --status-error-bg: rgba(239, 68, 68, 0.12);
+  --status-error-border: rgba(239, 68, 68, 0.28);
+  --status-error-text: #f87171;
+
+  --status-info-bg: rgba(14, 165, 233, 0.12);
+  --status-info-border: rgba(14, 165, 233, 0.28);
+  --status-info-text: #38bdf8;
+
+  /* Academic Disciplines */
+  --discipline-aiml-bg: rgba(139, 92, 246, 0.12);
+  --discipline-aiml-border: rgba(139, 92, 246, 0.3);
+  --discipline-aiml-text: #c4b5fd;
+
+  --discipline-aids-bg: rgba(59, 130, 246, 0.12);
+  --discipline-aids-border: rgba(59, 130, 246, 0.3);
+  --discipline-aids-text: #93c5fd;
+
+  --discipline-iiot-bg: rgba(34, 197, 94, 0.12);
+  --discipline-iiot-border: rgba(34, 197, 94, 0.3);
+  --discipline-iiot-text: #86efac;
+
+  --discipline-ar-bg: rgba(249, 115, 22, 0.12);
+  --discipline-ar-border: rgba(249, 115, 22, 0.3);
+  --discipline-ar-text: #fdba74;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 4px 12px 0 rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+
+  /* Legacy Compatibility Variables (Auto-mapped to new tokens) */
+  --background: var(--bg-canvas);
+  --foreground: var(--text-primary);
+  --surface: var(--bg-surface);
+  --surface-elevated: var(--bg-surface-elevated);
+  --border: var(--border-subtle);
+  --border-strong: var(--border-default);
+  --muted-foreground: var(--text-muted);
+  --primary: var(--accent-primary);
+  --primary-hover: var(--accent-hover);
+  --success: var(--status-success-text);
+  --warning: var(--status-warning-text);
+  --destructive: var(--status-error-text);
+  --accent-purple: #c4b5fd;
+
+  color-scheme: dark;
+}
+
+/* Base Body Styles */
+body {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Institutional Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-canvas);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Monospace & Tabular Typography */
+.font-code,
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+/* Clean Focus Ring */
+*:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--border-focus);
+}
+
+/* Structural Layout Panels (Replacing Generic Floating Cards) */
+.panel {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+}
+
+.panel-elevated {
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 0.5rem;
+}
+
+/* Interactive Row Styles */
+.table-row-hover:hover {
+  background-color: var(--bg-hover);
+}
+
+/* Reduced Motion Override */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

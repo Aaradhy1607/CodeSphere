@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js build output
+.next/
+out/
+build/
+dist/
+
+# Python / virtual environment
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+venv/
+.venv/
+env/
+.env
+*.env
+!.env.example
+
+# Databases & local storage
+*.sqlite3
+*.db
+.tmp/
+
+# Logs & temp files
+*.log
+*.exe
+.tmp_test/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+tsconfig.tsbuildinfo
