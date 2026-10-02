@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     LOCKOUT_DURATION_MINUTES: int = int(os.getenv("LOCKOUT_DURATION_MINUTES", "15"))
     
     # Environment
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    ENVIRONMENT: str = os.getenv("APP_ENV") or os.getenv("ENVIRONMENT", "development")
 
     # Database & Connection Pooling
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./codesphere.db")
@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     ALLOW_LOCAL_PROCESS_FALLBACK: bool = os.getenv("ALLOW_LOCAL_PROCESS_FALLBACK", "True").lower() in ("true", "1", "yes")
     
     # Seeder Configuration
-    SEED_DEMO_DATA: bool = os.getenv("SEED_DEMO_DATA", "False" if os.getenv("ENVIRONMENT", "development").lower() in ("production", "prod", "staging") else "True").lower() in ("true", "1", "yes")
+    SEED_DEMO_DATA: bool = os.getenv("SEED_DEMO_DATA", "False" if (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT", "development")).lower() in ("production", "prod", "staging") else "True").lower() in ("true", "1", "yes")
     SEED_STUDENT_PASSWORD: str = os.getenv("SEED_STUDENT_PASSWORD", "student123")
     SEED_STAFF_PASSWORD: str = os.getenv("SEED_STAFF_PASSWORD", "faculty123")
 
@@ -90,8 +90,10 @@ class Settings(BaseSettings):
         """
         Validates production configuration fail-fast invariants.
         Raises RuntimeError if insecure defaults or missing secrets are detected.
+        Never logs or prints secret values.
         """
-        is_prod = self.ENVIRONMENT.lower() in ("production", "prod", "staging")
+        env_val = (os.getenv("APP_ENV") or self.ENVIRONMENT or "").strip().lower()
+        is_prod = env_val in ("production", "prod", "staging")
         if not is_prod:
             return
 
@@ -101,26 +103,41 @@ class Settings(BaseSettings):
             "changeme",
             "password",
             "admin123",
-            "123456"
+            "123456",
+            "replace-with-a-strong-random-32-char-secret-key-for-production"
         ]
 
-        if not self.SECRET_KEY or self.SECRET_KEY in insecure_secrets or len(self.SECRET_KEY) < 32:
+        if not self.SECRET_KEY or not self.SECRET_KEY.strip() or self.SECRET_KEY.strip() in insecure_secrets or len(self.SECRET_KEY.strip()) < 32:
             raise RuntimeError(
                 "FATAL CONFIGURATION ERROR: A strong, unique SECRET_KEY (at least 32 characters) "
                 "must be configured via environment variables for production deployments."
+            )
+
+        if not self.INITIAL_ADMIN_EMAIL or not self.INITIAL_ADMIN_EMAIL.strip():
+            raise RuntimeError(
+                "FATAL CONFIGURATION ERROR: INITIAL_ADMIN_EMAIL is not configured."
+            )
+
+        insecure_passwords = [
+            "admin123", "password", "123456", "admin", "codesphere",
+            "password123", "changeme", "secret", "faculty123", "student123",
+            "replace-with-secure-initial-admin-password"
+        ]
+        if not self.INITIAL_ADMIN_PASSWORD or not self.INITIAL_ADMIN_PASSWORD.strip():
+            raise RuntimeError(
+                "FATAL CONFIGURATION ERROR: INITIAL_ADMIN_PASSWORD is not configured."
+            )
+
+        if self.INITIAL_ADMIN_PASSWORD.strip() in insecure_passwords or len(self.INITIAL_ADMIN_PASSWORD.strip()) < 8:
+            raise RuntimeError(
+                "FATAL CONFIGURATION ERROR: Insecure INITIAL_ADMIN_PASSWORD detected in production. "
+                "You must set a strong, unique initial password (at least 8 characters) via environment variables."
             )
 
         if self.DATABASE_URL.startswith("sqlite"):
             raise RuntimeError(
                 "FATAL CONFIGURATION ERROR: SQLite database cannot be used in a production or staging environment. "
                 "Please configure a valid PostgreSQL connection in DATABASE_URL."
-            )
-
-        insecure_passwords = ["admin123", "password", "123456", "admin", "codesphere"]
-        if self.INITIAL_ADMIN_PASSWORD in insecure_passwords:
-            raise RuntimeError(
-                "FATAL CONFIGURATION ERROR: Insecure INITIAL_ADMIN_PASSWORD detected in production. "
-                "You must set a strong, unique initial password via environment variables."
             )
 
 settings = Settings()

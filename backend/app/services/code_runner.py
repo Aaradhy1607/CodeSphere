@@ -723,10 +723,12 @@ class SandboxedCodeRunner:
                     gcc_bin = clang_bin
 
             try:
-                # Compile strictly as C (C11 standard with math library linked)
-                compile_cmd = [gcc_bin, "-O2", "-std=c11", src_path, "-o", exe_path, "-lm"]
+                # Compile strictly as C (C11 standard)
+                compile_cmd = [gcc_bin, "-O2", "-std=c11", src_path, "-o", exe_path]
                 if self.is_windows:
                     compile_cmd.extend(["-static", "-static-libgcc"])
+                else:
+                    compile_cmd.append("-lm")
                 compile_proc = subprocess.run(
                     compile_cmd,
                     capture_output=True,

@@ -1,3 +1,4 @@
+import os
 import datetime
 from sqlalchemy.orm import Session
 from app.models.models import (
@@ -7,35 +8,46 @@ from app.core.config import settings
 from app.core.security import get_password_hash
 
 def seed_database(db: Session):
-    is_prod = settings.ENVIRONMENT.lower() in ("production", "prod", "staging")
+    env_val = (os.getenv("APP_ENV") or settings.ENVIRONMENT or "").strip().lower()
+    is_prod = env_val in ("production", "prod", "staging")
 
-    # 1. INITIAL SUPER ADMIN BOOTSTRAP (Required in all environments)
+    # 1. INITIAL SUPER ADMIN BOOTSTRAP (Idempotent single-admin creation)
     initial_admin_email = settings.INITIAL_ADMIN_EMAIL.strip().lower()
-    admin_allowlist_entry = db.query(AdminAllowlist).filter(AdminAllowlist.email == initial_admin_email).first()
-    if not admin_allowlist_entry:
-        db.add(AdminAllowlist(
-            email=initial_admin_email,
-            name=settings.INITIAL_ADMIN_NAME,
-            assigned_role=UserRole.SUPER_ADMIN.value,
-            added_by="SYSTEM_BOOTSTRAP",
-            is_active=True
-        ))
-    else:
-        admin_allowlist_entry.assigned_role = UserRole.SUPER_ADMIN.value
-    db.flush()
 
-    initial_admin = db.query(User).filter(User.email == initial_admin_email).first()
-    if not initial_admin:
-        initial_admin = User(
-            email=initial_admin_email,
-            full_name=settings.INITIAL_ADMIN_NAME,
-            role=UserRole.SUPER_ADMIN.value,
-            status=AccountStatus.ACTIVE.value,
-            hashed_password=get_password_hash(settings.INITIAL_ADMIN_PASSWORD),
-            avatar_url="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
-            is_active=True
-        )
-        db.add(initial_admin)
+    # Check if ANY Super Admin already exists in the database
+    existing_super_admin = db.query(User).filter(User.role == UserRole.SUPER_ADMIN.value).first()
+
+    if not existing_super_admin:
+        # Check if the user exists with a different role
+        existing_user = db.query(User).filter(User.email == initial_admin_email).first()
+        if existing_user:
+            existing_user.role = UserRole.SUPER_ADMIN.value
+            existing_user.status = AccountStatus.ACTIVE.value
+            existing_user.is_active = True
+        else:
+            initial_admin = User(
+                email=initial_admin_email,
+                full_name=settings.INITIAL_ADMIN_NAME,
+                role=UserRole.SUPER_ADMIN.value,
+                status=AccountStatus.ACTIVE.value,
+                hashed_password=get_password_hash(settings.INITIAL_ADMIN_PASSWORD),
+                avatar_url="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+                is_active=True
+            )
+            db.add(initial_admin)
+
+        # Ensure allowlist entry exists for bootstrap admin
+        admin_allowlist_entry = db.query(AdminAllowlist).filter(AdminAllowlist.email == initial_admin_email).first()
+        if not admin_allowlist_entry:
+            db.add(AdminAllowlist(
+                email=initial_admin_email,
+                name=settings.INITIAL_ADMIN_NAME,
+                assigned_role=UserRole.SUPER_ADMIN.value,
+                added_by="SYSTEM_BOOTSTRAP",
+                is_active=True
+            ))
+        else:
+            admin_allowlist_entry.assigned_role = UserRole.SUPER_ADMIN.value
         db.flush()
 
     # In production, stop here. Do NOT seed universal demo staff or student credentials.

@@ -67,17 +67,16 @@ int main() {
 def test_c_execution():
     if not _is_compiler_available("gcc"):
         pytest.skip("gcc compiler not available or functional on host environment")
-    code = """
-    #include <stdio.h>
-    int main() {
-        int x;
-        if (scanf("%d", &x) == 1) {
-            printf("%d\\n", x + 5);
-        }
-        return 0;
+    code = """#include <stdio.h>
+int main() {
+    int x;
+    if (scanf("%d", &x) == 1) {
+        printf("%d\\n", x + 5);
     }
-    """
-    res = code_runner.execute_single(code, "c", "15", timeout_seconds=5.0)
+    return 0;
+}
+"""
+    res = code_runner.execute_single(code, "c", "15\n", timeout_seconds=5.0)
     assert res["verdict"] in (SubmissionVerdict.AC, SubmissionVerdict.AC.value)
     assert res["output"].strip() == "20"
 
