@@ -7,24 +7,24 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str = "CodeSphere - USAR Coding Assessment & Placement Analytics Platform"
     API_V1_STR: str = "/api/v1"
+    # Environment
+    ENVIRONMENT: str = os.getenv("APP_ENV") or os.getenv("ENVIRONMENT", "development")
+
     # Authentication & JWT
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "codesphere-usar-super-secret-jwt-key-2026-production-ready")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "") if (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT", "development")).lower() in ("production", "prod", "staging") else os.getenv("SECRET_KEY", "codesphere-usar-super-secret-jwt-key-2026-production-ready")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
     REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
     PASSWORD_RESET_EXPIRE_MINUTES: int = int(os.getenv("PASSWORD_RESET_EXPIRE_MINUTES", "30"))
 
-    # Initial Admin Bootstrap (Zero hardcoding)
-    INITIAL_ADMIN_EMAIL: str = os.getenv("INITIAL_ADMIN_EMAIL", "placement@ipu.ac.in")
-    INITIAL_ADMIN_PASSWORD: str = os.getenv("INITIAL_ADMIN_PASSWORD", "admin123")
+    # Initial Admin Bootstrap (Zero hardcoding in production)
+    INITIAL_ADMIN_EMAIL: str = os.getenv("INITIAL_ADMIN_EMAIL", "") if (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT", "development")).lower() in ("production", "prod", "staging") else os.getenv("INITIAL_ADMIN_EMAIL", "placement@ipu.ac.in")
+    INITIAL_ADMIN_PASSWORD: str = os.getenv("INITIAL_ADMIN_PASSWORD", "") if (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT", "development")).lower() in ("production", "prod", "staging") else os.getenv("INITIAL_ADMIN_PASSWORD", "admin123")
     INITIAL_ADMIN_NAME: str = os.getenv("INITIAL_ADMIN_NAME", "Dr. A. K. Sharma (Placement Head)")
 
     # Security & Brute-Force Rate Limiting
     MAX_LOGIN_ATTEMPTS: int = int(os.getenv("MAX_LOGIN_ATTEMPTS", "5"))
     LOCKOUT_DURATION_MINUTES: int = int(os.getenv("LOCKOUT_DURATION_MINUTES", "15"))
-    
-    # Environment
-    ENVIRONMENT: str = os.getenv("APP_ENV") or os.getenv("ENVIRONMENT", "development")
 
     # Database & Connection Pooling
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./codesphere.db")

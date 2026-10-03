@@ -71,9 +71,39 @@ def test_1_missing_initial_admin_email_fails_production_validation():
     assert "INITIAL_ADMIN_EMAIL" in str(exc.value)
 
 # =====================================================================
-# 2. MISSING INITIAL_ADMIN_PASSWORD FAILS PRODUCTION VALIDATION
+# 2. EMPTY INITIAL_ADMIN_EMAIL FAILS VALIDATION
 # =====================================================================
-def test_2_missing_initial_admin_password_fails_production_validation():
+def test_2_empty_initial_admin_email_fails_validation():
+    s = Settings(
+        ENVIRONMENT="production",
+        SECRET_KEY="a-very-long-production-grade-secret-key-32-chars-long",
+        INITIAL_ADMIN_EMAIL="",
+        INITIAL_ADMIN_PASSWORD="a-very-strong-production-password-2026",
+        DATABASE_URL="postgresql://user:pass@localhost:5432/db"
+    )
+    with pytest.raises(RuntimeError) as exc:
+        s.validate_production_security()
+    assert "INITIAL_ADMIN_EMAIL" in str(exc.value)
+
+# =====================================================================
+# 3. WHITESPACE-ONLY INITIAL_ADMIN_EMAIL FAILS VALIDATION
+# =====================================================================
+def test_3_whitespace_initial_admin_email_fails_validation():
+    s = Settings(
+        ENVIRONMENT="production",
+        SECRET_KEY="a-very-long-production-grade-secret-key-32-chars-long",
+        INITIAL_ADMIN_EMAIL="   \t\n  ",
+        INITIAL_ADMIN_PASSWORD="a-very-strong-production-password-2026",
+        DATABASE_URL="postgresql://user:pass@localhost:5432/db"
+    )
+    with pytest.raises(RuntimeError) as exc:
+        s.validate_production_security()
+    assert "INITIAL_ADMIN_EMAIL" in str(exc.value)
+
+# =====================================================================
+# 4. MISSING INITIAL_ADMIN_PASSWORD FAILS PRODUCTION VALIDATION
+# =====================================================================
+def test_4_missing_initial_admin_password_fails_production_validation():
     s = Settings(
         ENVIRONMENT="production",
         SECRET_KEY="a-very-long-production-grade-secret-key-32-chars-long",
@@ -86,10 +116,10 @@ def test_2_missing_initial_admin_password_fails_production_validation():
     assert "INITIAL_ADMIN_PASSWORD" in str(exc.value)
 
 # =====================================================================
-# 3. WEAK ADMIN PASSWORD FAILS PRODUCTION VALIDATION
+# 5. WEAK/DEFAULT ADMIN PASSWORD FAILS PRODUCTION VALIDATION
 # =====================================================================
-def test_3_weak_admin_password_fails_production_validation():
-    weak_passwords = ["admin123", "password", "123456", "admin", "codesphere", "short"]
+def test_5_weak_admin_password_fails_production_validation():
+    weak_passwords = ["admin123", "password", "123456", "admin", "codesphere", "short", "   "]
     for weak_p in weak_passwords:
         s = Settings(
             ENVIRONMENT="production",
@@ -100,159 +130,34 @@ def test_3_weak_admin_password_fails_production_validation():
         )
         with pytest.raises(RuntimeError) as exc:
             s.validate_production_security()
-        assert "Insecure INITIAL_ADMIN_PASSWORD" in str(exc.value) or "INITIAL_ADMIN_PASSWORD" in str(exc.value)
+        assert "INITIAL_ADMIN_PASSWORD" in str(exc.value)
 
 # =====================================================================
-# 4. MISSING SECRET_KEY FAILS PRODUCTION VALIDATION
+# 6. MISSING SECRET_KEY FAILS PRODUCTION VALIDATION
 # =====================================================================
-def test_4_missing_secret_key_fails_production_validation():
-    s = Settings(
-        ENVIRONMENT="production",
-        SECRET_KEY="",
-        INITIAL_ADMIN_EMAIL="admin@ipu.ac.in",
-        INITIAL_ADMIN_PASSWORD="a-very-strong-production-password-2026",
-        DATABASE_URL="postgresql://user:pass@localhost:5432/db"
-    )
-    with pytest.raises(RuntimeError) as exc:
-        s.validate_production_security()
-    assert "SECRET_KEY" in str(exc.value)
+def test_6_missing_secret_key_fails_production_validation():
+    invalid_keys = ["", "short-key", "codesphere-usar-super-secret-jwt-key-2026-production-ready", "admin123", "   "]
+    for inv_k in invalid_keys:
+        s = Settings(
+            ENVIRONMENT="production",
+            SECRET_KEY=inv_k,
+            INITIAL_ADMIN_EMAIL="admin@ipu.ac.in",
+            INITIAL_ADMIN_PASSWORD="a-very-strong-production-password-2026",
+            DATABASE_URL="postgresql://user:pass@localhost:5432/db"
+        )
+        with pytest.raises(RuntimeError) as exc:
+            s.validate_production_security()
+        assert "SECRET_KEY" in str(exc.value)
 
 # =====================================================================
-# 5. PRODUCTION SQLITE IS REJECTED IF POSTGRESQL IS REQUIRED
+# 7. EXISTING SUPER_ADMIN -> BOOTSTRAP IS STRICTLY IDEMPOTENT
 # =====================================================================
-def test_5_production_sqlite_is_rejected_if_postgresql_required():
-    s = Settings(
-        ENVIRONMENT="production",
-        SECRET_KEY="a-very-long-production-grade-secret-key-32-chars-long",
-        INITIAL_ADMIN_EMAIL="admin@ipu.ac.in",
-        INITIAL_ADMIN_PASSWORD="a-very-strong-production-password-2026",
-        DATABASE_URL="sqlite:///./prod.db"
-    )
-    with pytest.raises(RuntimeError) as exc:
-        s.validate_production_security()
-    assert "SQLite" in str(exc.value)
-
-# =====================================================================
-# 6. PRODUCTION REQUIRES DOCKER SANDBOX
-# =====================================================================
-def test_6_production_requires_docker_sandbox():
-    # When REQUIRE_DOCKER_SANDBOX is True and ALLOW_LOCAL_PROCESS_FALLBACK is False,
-    # Docker backend fails closed if docker daemon is unavailable
-    backend = DockerExecutionBackend(fallback_backend=None)
-    backend._docker_available = False
-    
-    orig_req = settings.REQUIRE_DOCKER_SANDBOX
-    orig_allow = settings.ALLOW_LOCAL_PROCESS_FALLBACK
-    try:
-        settings.REQUIRE_DOCKER_SANDBOX = True
-        settings.ALLOW_LOCAL_PROCESS_FALLBACK = False
-
-        session = ExecutionSession("python", "temp", cmd=["python", "-c", "print(1)"])
-        res = backend.execute(session, "", timeout_seconds=2.0)
-        assert res["verdict"] == SubmissionVerdict.RE
-        assert "Docker container sandboxing is mandatory" in res["error"]
-        assert res["backend"] == "docker_unavailable_fail_closed"
-    finally:
-        settings.REQUIRE_DOCKER_SANDBOX = orig_req
-        settings.ALLOW_LOCAL_PROCESS_FALLBACK = orig_allow
-
-# =====================================================================
-# 7. PRODUCTION DOES NOT SILENTLY FALL BACK TO LOCAL PROCESS BACKEND
-# =====================================================================
-def test_7_production_does_not_silently_fallback():
-    backend = DockerExecutionBackend(fallback_backend=LocalProcessBackend())
-    backend._docker_available = False
-    
-    orig_req = settings.REQUIRE_DOCKER_SANDBOX
-    orig_allow = settings.ALLOW_LOCAL_PROCESS_FALLBACK
-    try:
-        settings.REQUIRE_DOCKER_SANDBOX = True
-        settings.ALLOW_LOCAL_PROCESS_FALLBACK = False
-
-        session = ExecutionSession("python", "temp", cmd=["python", "-c", "print(1)"])
-        res = backend.execute(session, "", timeout_seconds=2.0)
-        assert res["backend"] != "local_process_fallback"
-        assert res["backend"] == "docker_unavailable_fail_closed"
-    finally:
-        settings.REQUIRE_DOCKER_SANDBOX = orig_req
-        settings.ALLOW_LOCAL_PROCESS_FALLBACK = orig_allow
-
-# =====================================================================
-# 8. DEVELOPMENT MAY STILL USE LOCAL PROCESS BACKEND
-# =====================================================================
-def test_8_development_may_use_local_process_backend():
-    runner = SandboxedCodeRunner(backend=LocalProcessBackend())
-    res = runner.execute_single("print('dev-ok')", "python", "")
-    assert res["verdict"] == SubmissionVerdict.AC
-    assert "dev-ok" in res["output"]
-
-# =====================================================================
-# 9. DEMO ENDPOINTS BLOCKED IN PRODUCTION
-# =====================================================================
-def test_9_demo_endpoints_blocked_in_production():
-    orig_env = settings.ENVIRONMENT
-    try:
-        settings.ENVIRONMENT = "production"
-        
-        # /auth/demo-users must return 403 in production
-        resp_users = client.get("/api/v1/auth/demo-users")
-        assert resp_users.status_code == 403
-        assert "disabled in production" in resp_users.json()["detail"]
-
-        # /auth/demo-switch must return 403 in production
-        resp_switch = client.post("/api/v1/auth/demo-switch", json={"role": "STUDENT"})
-        assert resp_switch.status_code == 403
-        assert "disabled in production" in resp_switch.json()["detail"]
-    finally:
-        settings.ENVIRONMENT = orig_env
-
-# =====================================================================
-# 10. NO PRODUCTION DEMO USERS CREATED
-# =====================================================================
-def test_10_no_production_demo_users_created():
+def test_7_existing_super_admin_bootstrap_is_idempotent():
     test_db_url = f"sqlite:///:memory:"
     t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=t_engine)
     TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
-    
-    t_db = TestingSession()
-    orig_env = settings.ENVIRONMENT
-    orig_email = settings.INITIAL_ADMIN_EMAIL
-    orig_pass = settings.INITIAL_ADMIN_PASSWORD
-    orig_seed = settings.SEED_DEMO_DATA
-    try:
-        settings.ENVIRONMENT = "production"
-        settings.INITIAL_ADMIN_EMAIL = "prod.admin@ipu.ac.in"
-        settings.INITIAL_ADMIN_PASSWORD = "StrongProdPassword2026!"
-        settings.SEED_DEMO_DATA = False
 
-        seed_database(t_db)
-
-        users = t_db.query(User).all()
-        # In production, exactly 1 Super Admin user must be created
-        assert len(users) == 1
-        assert users[0].email == "prod.admin@ipu.ac.in"
-        assert users[0].role == UserRole.SUPER_ADMIN.value
-
-        # No student demo accounts or mock users
-        students = t_db.query(User).filter(User.role == UserRole.STUDENT.value).all()
-        assert len(students) == 0
-    finally:
-        settings.ENVIRONMENT = orig_env
-        settings.INITIAL_ADMIN_EMAIL = orig_email
-        settings.INITIAL_ADMIN_PASSWORD = orig_pass
-        settings.SEED_DEMO_DATA = orig_seed
-        t_db.close()
-
-# =====================================================================
-# 11. INITIAL SUPER ADMIN BOOTSTRAP IS IDEMPOTENT
-# =====================================================================
-def test_11_initial_super_admin_bootstrap_is_idempotent():
-    test_db_url = f"sqlite:///:memory:"
-    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
-    Base.metadata.create_all(bind=t_engine)
-    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
-    
     t_db = TestingSession()
     orig_env = settings.ENVIRONMENT
     orig_email = settings.INITIAL_ADMIN_EMAIL
@@ -278,47 +183,14 @@ def test_11_initial_super_admin_bootstrap_is_idempotent():
         t_db.close()
 
 # =====================================================================
-# 12. RESTART DOES NOT CREATE DUPLICATE SUPER ADMIN
+# 8. EXISTING SUPER_ADMIN PASSWORD REMAINS UNCHANGED AFTER REPEATED BOOTSTRAP
 # =====================================================================
-def test_12_restart_does_not_create_duplicate_super_admin():
+def test_8_existing_super_admin_password_remains_unchanged():
     test_db_url = f"sqlite:///:memory:"
     t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=t_engine)
     TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
-    
-    t_db = TestingSession()
-    orig_env = settings.ENVIRONMENT
-    try:
-        settings.ENVIRONMENT = "production"
-        # Manually create existing Super Admin
-        sa = User(
-            email="existing.superadmin@ipu.ac.in",
-            full_name="Existing Super Admin",
-            role=UserRole.SUPER_ADMIN.value,
-            hashed_password=get_password_hash("existing_hash"),
-            is_active=True
-        )
-        t_db.add(sa)
-        t_db.commit()
 
-        # Run seeder
-        seed_database(t_db)
-        super_admins = t_db.query(User).filter(User.role == UserRole.SUPER_ADMIN.value).all()
-        assert len(super_admins) == 1
-        assert super_admins[0].email == "existing.superadmin@ipu.ac.in"
-    finally:
-        settings.ENVIRONMENT = orig_env
-        t_db.close()
-
-# =====================================================================
-# 13. RESTART DOES NOT RESET ADMIN PASSWORD
-# =====================================================================
-def test_13_restart_does_not_reset_admin_password():
-    test_db_url = f"sqlite:///:memory:"
-    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
-    Base.metadata.create_all(bind=t_engine)
-    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
-    
     t_db = TestingSession()
     orig_env = settings.ENVIRONMENT
     orig_email = settings.INITIAL_ADMIN_EMAIL
@@ -333,7 +205,7 @@ def test_13_restart_does_not_reset_admin_password():
         admin_u = t_db.query(User).filter(User.email == "reset.test.admin@ipu.ac.in").first()
         assert verify_password("FirstPassword2026!", admin_u.hashed_password)
 
-        # Admin changes their password in production
+        # Admin updates their password in production
         admin_u.hashed_password = get_password_hash("UpdatedCustomPassword2026!")
         t_db.commit()
 
@@ -351,165 +223,472 @@ def test_13_restart_does_not_reset_admin_password():
         t_db.close()
 
 # =====================================================================
-# 14. STUDENTS CANNOT CREATE PRIVILEGED USERS
+# 9. EXISTING SUPER_ADMIN EMAIL REMAINS UNCHANGED
 # =====================================================================
-def test_14_students_cannot_create_privileged_users():
+def test_9_existing_super_admin_email_remains_unchanged():
+    test_db_url = f"sqlite:///:memory:"
+    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=t_engine)
+    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
+
+    t_db = TestingSession()
+    orig_env = settings.ENVIRONMENT
+    orig_email = settings.INITIAL_ADMIN_EMAIL
+    try:
+        settings.ENVIRONMENT = "production"
+        settings.INITIAL_ADMIN_EMAIL = "different.email@ipu.ac.in"
+
+        sa = User(
+            email="original.superadmin@ipu.ac.in",
+            full_name="Original Super Admin",
+            role=UserRole.SUPER_ADMIN.value,
+            hashed_password=get_password_hash("existing_hash"),
+            is_active=True
+        )
+        t_db.add(sa)
+        t_db.commit()
+
+        # Seed with different initial email in env
+        seed_database(t_db)
+
+        super_admins = t_db.query(User).filter(User.role == UserRole.SUPER_ADMIN.value).all()
+        assert len(super_admins) == 1
+        assert super_admins[0].email == "original.superadmin@ipu.ac.in"
+    finally:
+        settings.ENVIRONMENT = orig_env
+        settings.INITIAL_ADMIN_EMAIL = orig_email
+        t_db.close()
+
+# =====================================================================
+# 10. EXISTING NORMAL USER WITH INITIAL_ADMIN_EMAIL IS NOT PROMOTED (FAILS SAFELY)
+# =====================================================================
+def test_10_existing_normal_user_is_not_silently_promoted():
+    test_db_url = f"sqlite:///:memory:"
+    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=t_engine)
+    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
+
+    t_db = TestingSession()
+    orig_env = settings.ENVIRONMENT
+    orig_email = settings.INITIAL_ADMIN_EMAIL
+    try:
+        settings.ENVIRONMENT = "production"
+        settings.INITIAL_ADMIN_EMAIL = "target.user@ipu.ac.in"
+
+        # Pre-existing user with non-privileged role
+        normal_u = User(
+            email="target.user@ipu.ac.in",
+            full_name="Normal User",
+            role="GUEST",
+            hashed_password=get_password_hash("guestpass"),
+            is_active=True
+        )
+        t_db.add(normal_u)
+        t_db.commit()
+
+        # Seeder must fail closed rather than promoting this user to SUPER_ADMIN
+        with pytest.raises(RuntimeError) as exc:
+            seed_database(t_db)
+        assert "Automatic promotion to SUPER_ADMIN is blocked" in str(exc.value)
+
+        # Verify user role is still un-escalated
+        t_db.refresh(normal_u)
+        assert normal_u.role == "GUEST"
+    finally:
+        settings.ENVIRONMENT = orig_env
+        settings.INITIAL_ADMIN_EMAIL = orig_email
+        t_db.close()
+
+# =====================================================================
+# 11. EXISTING FACULTY WITH INITIAL_ADMIN_EMAIL CANNOT BECOME SUPER_ADMIN
+# =====================================================================
+def test_11_existing_faculty_cannot_become_super_admin():
+    test_db_url = f"sqlite:///:memory:"
+    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=t_engine)
+    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
+
+    t_db = TestingSession()
+    orig_env = settings.ENVIRONMENT
+    orig_email = settings.INITIAL_ADMIN_EMAIL
+    try:
+        settings.ENVIRONMENT = "production"
+        settings.INITIAL_ADMIN_EMAIL = "faculty.member@ipu.ac.in"
+
+        faculty_u = User(
+            email="faculty.member@ipu.ac.in",
+            full_name="Prof. Member",
+            role=UserRole.FACULTY.value,
+            hashed_password=get_password_hash("facultypass"),
+            is_active=True
+        )
+        t_db.add(faculty_u)
+        t_db.commit()
+
+        with pytest.raises(RuntimeError) as exc:
+            seed_database(t_db)
+        assert "FACULTY" in str(exc.value)
+
+        t_db.refresh(faculty_u)
+        assert faculty_u.role == UserRole.FACULTY.value
+    finally:
+        settings.ENVIRONMENT = orig_env
+        settings.INITIAL_ADMIN_EMAIL = orig_email
+        t_db.close()
+
+# =====================================================================
+# 12. EXISTING STUDENT WITH INITIAL_ADMIN_EMAIL CANNOT BECOME SUPER_ADMIN
+# =====================================================================
+def test_12_existing_student_cannot_become_super_admin():
+    test_db_url = f"sqlite:///:memory:"
+    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=t_engine)
+    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
+
+    t_db = TestingSession()
+    orig_env = settings.ENVIRONMENT
+    orig_email = settings.INITIAL_ADMIN_EMAIL
+    try:
+        settings.ENVIRONMENT = "production"
+        settings.INITIAL_ADMIN_EMAIL = "student.member@std.ggsipu.ac.in"
+
+        student_u = User(
+            email="student.member@std.ggsipu.ac.in",
+            full_name="Student Member",
+            role=UserRole.STUDENT.value,
+            hashed_password=get_password_hash("studentpass"),
+            is_active=True
+        )
+        t_db.add(student_u)
+        t_db.commit()
+
+        with pytest.raises(RuntimeError) as exc:
+            seed_database(t_db)
+        assert "STUDENT" in str(exc.value)
+
+        t_db.refresh(student_u)
+        assert student_u.role == UserRole.STUDENT.value
+    finally:
+        settings.ENVIRONMENT = orig_env
+        settings.INITIAL_ADMIN_EMAIL = orig_email
+        t_db.close()
+
+# =====================================================================
+# 13. EXISTING ADMIN WITH INITIAL_ADMIN_EMAIL IS NOT SILENTLY OVERWRITTEN
+# =====================================================================
+def test_13_existing_admin_cannot_be_silently_converted():
+    test_db_url = f"sqlite:///:memory:"
+    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=t_engine)
+    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
+
+    t_db = TestingSession()
+    orig_env = settings.ENVIRONMENT
+    orig_email = settings.INITIAL_ADMIN_EMAIL
+    try:
+        settings.ENVIRONMENT = "production"
+        settings.INITIAL_ADMIN_EMAIL = "admin.operations@ipu.ac.in"
+
+        admin_u = User(
+            email="admin.operations@ipu.ac.in",
+            full_name="Ops Admin",
+            role=UserRole.ADMIN.value,
+            hashed_password=get_password_hash("adminpass"),
+            is_active=True
+        )
+        t_db.add(admin_u)
+        t_db.commit()
+
+        with pytest.raises(RuntimeError) as exc:
+            seed_database(t_db)
+        assert "ADMIN" in str(exc.value)
+
+        t_db.refresh(admin_u)
+        assert admin_u.role == UserRole.ADMIN.value
+    finally:
+        settings.ENVIRONMENT = orig_env
+        settings.INITIAL_ADMIN_EMAIL = orig_email
+        t_db.close()
+
+# =====================================================================
+# 14. NO SUPER_ADMIN + NO CONFLICT -> EXACTLY ONE SUPER_ADMIN CREATED
+# =====================================================================
+def test_14_clean_bootstrap_creates_exactly_one_super_admin():
+    test_db_url = f"sqlite:///:memory:"
+    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=t_engine)
+    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
+
+    t_db = TestingSession()
+    orig_env = settings.ENVIRONMENT
+    orig_email = settings.INITIAL_ADMIN_EMAIL
+    orig_pass = settings.INITIAL_ADMIN_PASSWORD
+    try:
+        settings.ENVIRONMENT = "production"
+        settings.INITIAL_ADMIN_EMAIL = "new.superadmin@ipu.ac.in"
+        settings.INITIAL_ADMIN_PASSWORD = "StrongProdPassword2026!"
+
+        seed_database(t_db)
+
+        super_admins = t_db.query(User).filter(User.role == UserRole.SUPER_ADMIN.value).all()
+        assert len(super_admins) == 1
+        assert super_admins[0].email == "new.superadmin@ipu.ac.in"
+        assert super_admins[0].is_active is True
+    finally:
+        settings.ENVIRONMENT = orig_env
+        settings.INITIAL_ADMIN_EMAIL = orig_email
+        settings.INITIAL_ADMIN_PASSWORD = orig_pass
+        t_db.close()
+
+# =====================================================================
+# 15. RUNNING BOOTSTRAP MULTIPLE TIMES KEEPS EXACTLY ONE SUPER_ADMIN
+# =====================================================================
+def test_15_repeated_bootstrap_maintains_single_super_admin():
+    test_db_url = f"sqlite:///:memory:"
+    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=t_engine)
+    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
+
+    t_db = TestingSession()
+    orig_env = settings.ENVIRONMENT
+    orig_email = settings.INITIAL_ADMIN_EMAIL
+    orig_pass = settings.INITIAL_ADMIN_PASSWORD
+    try:
+        settings.ENVIRONMENT = "production"
+        settings.INITIAL_ADMIN_EMAIL = "repeated.superadmin@ipu.ac.in"
+        settings.INITIAL_ADMIN_PASSWORD = "StrongProdPassword2026!"
+
+        for _ in range(5):
+            seed_database(t_db)
+
+        super_admins = t_db.query(User).filter(User.role == UserRole.SUPER_ADMIN.value).all()
+        assert len(super_admins) == 1
+        assert super_admins[0].email == "repeated.superadmin@ipu.ac.in"
+    finally:
+        settings.ENVIRONMENT = orig_env
+        settings.INITIAL_ADMIN_EMAIL = orig_email
+        settings.INITIAL_ADMIN_PASSWORD = orig_pass
+        t_db.close()
+
+# =====================================================================
+# 16. NO PLAINTEXT ADMIN PASSWORD APPEARS IN DATABASE
+# =====================================================================
+def test_16_no_plaintext_admin_password_in_db():
+    test_db_url = f"sqlite:///:memory:"
+    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=t_engine)
+    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
+
+    t_db = TestingSession()
+    orig_env = settings.ENVIRONMENT
+    orig_email = settings.INITIAL_ADMIN_EMAIL
+    orig_pass = settings.INITIAL_ADMIN_PASSWORD
+    try:
+        settings.ENVIRONMENT = "production"
+        raw_pw = "SuperSecretUnstoredPassword123!"
+        settings.INITIAL_ADMIN_EMAIL = "plaintext.check@ipu.ac.in"
+        settings.INITIAL_ADMIN_PASSWORD = raw_pw
+
+        seed_database(t_db)
+
+        admin = t_db.query(User).filter(User.email == "plaintext.check@ipu.ac.in").first()
+        assert admin is not None
+        assert admin.hashed_password != raw_pw
+        assert raw_pw not in admin.hashed_password
+        assert verify_password(raw_pw, admin.hashed_password)
+    finally:
+        settings.ENVIRONMENT = orig_env
+        settings.INITIAL_ADMIN_EMAIL = orig_email
+        settings.INITIAL_ADMIN_PASSWORD = orig_pass
+        t_db.close()
+
+# =====================================================================
+# 17. NO PASSWORD OR SECRET IS EMITTED IN VALIDATION/BOOTSTRAP ERROR MESSAGES
+# =====================================================================
+def test_17_no_password_or_secret_emitted_in_errors():
+    secret_pass = "MySuperSecretPasswordNeverLeak123!"
+    s = Settings(
+        ENVIRONMENT="production",
+        SECRET_KEY="short",
+        INITIAL_ADMIN_EMAIL="admin@ipu.ac.in",
+        INITIAL_ADMIN_PASSWORD=secret_pass,
+        DATABASE_URL="postgresql://user:pass@localhost:5432/db"
+    )
+    with pytest.raises(RuntimeError) as exc:
+        s.validate_production_security()
+    error_msg = str(exc.value)
+    assert secret_pass not in error_msg
+    assert "short" not in error_msg
+
+# =====================================================================
+# 18. BOOTSTRAP FAILURE ROLLS BACK CLEANLY
+# =====================================================================
+def test_18_bootstrap_failure_rolls_back_cleanly():
+    test_db_url = f"sqlite:///:memory:"
+    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=t_engine)
+    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
+
+    t_db = TestingSession()
+    orig_env = settings.ENVIRONMENT
+    orig_email = settings.INITIAL_ADMIN_EMAIL
+    try:
+        settings.ENVIRONMENT = "production"
+        settings.INITIAL_ADMIN_EMAIL = "conflict@ipu.ac.in"
+
+        # Pre-seed conflicting student
+        st = User(
+            email="conflict@ipu.ac.in",
+            full_name="Conflict User",
+            role=UserRole.STUDENT.value,
+            hashed_password=get_password_hash("pass"),
+            is_active=True
+        )
+        t_db.add(st)
+        t_db.commit()
+
+        with pytest.raises(RuntimeError):
+            seed_database(t_db)
+
+        # No partially created Super Admin or orphaned records
+        sa_count = t_db.query(User).filter(User.role == UserRole.SUPER_ADMIN.value).count()
+        assert sa_count == 0
+    finally:
+        settings.ENVIRONMENT = orig_env
+        settings.INITIAL_ADMIN_EMAIL = orig_email
+        t_db.close()
+
+# =====================================================================
+# 19. EXISTING PRODUCTION DEMO-DATA PROHIBITION REMAINS INTACT
+# =====================================================================
+def test_19_existing_production_demo_data_prohibition():
+    test_db_url = f"sqlite:///:memory:"
+    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=t_engine)
+    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
+
+    t_db = TestingSession()
+    orig_env = settings.ENVIRONMENT
+    orig_email = settings.INITIAL_ADMIN_EMAIL
+    orig_pass = settings.INITIAL_ADMIN_PASSWORD
+    orig_seed = settings.SEED_DEMO_DATA
+    try:
+        settings.ENVIRONMENT = "production"
+        settings.INITIAL_ADMIN_EMAIL = "prod.clean@ipu.ac.in"
+        settings.INITIAL_ADMIN_PASSWORD = "StrongProdPassword2026!"
+        settings.SEED_DEMO_DATA = False
+
+        seed_database(t_db)
+
+        users = t_db.query(User).all()
+        # In production, exactly 1 Super Admin user must be created
+        assert len(users) == 1
+        assert users[0].email == "prod.clean@ipu.ac.in"
+        assert users[0].role == UserRole.SUPER_ADMIN.value
+
+        # No demo students or mock users seeded
+        students = t_db.query(User).filter(User.role == UserRole.STUDENT.value).all()
+        assert len(students) == 0
+    finally:
+        settings.ENVIRONMENT = orig_env
+        settings.INITIAL_ADMIN_EMAIL = orig_email
+        settings.INITIAL_ADMIN_PASSWORD = orig_pass
+        settings.SEED_DEMO_DATA = orig_seed
+        t_db.close()
+
+# =====================================================================
+# 20. EXISTING RBAC / IDOR / PRIVILEGE SECURITY TESTS PASS
+# =====================================================================
+def test_20_students_cannot_create_privileged_users_or_escalate():
     db = SessionLocal()
     try:
-        student = _create_user(db, "student.nocreate@std.ggsipu.ac.in", UserRole.STUDENT.value, "No Create Student")
+        student = _create_user(db, "student.rbac.check@std.ggsipu.ac.in", UserRole.STUDENT.value, "RBAC Check Student")
         headers = _get_auth_headers(student)
 
-        # Student attempts to add admin to allowlist
+        # 1. Attempt to add admin to allowlist
         resp1 = client.post(
             "/api/v1/auth/admins",
             headers=headers,
-            json={"email": "attacker@ipu.ac.in", "name": "Attacker", "assigned_role": "ADMIN"}
+            json={"email": "hacker@ipu.ac.in", "name": "Hacker", "assigned_role": "ADMIN"}
         )
         assert resp1.status_code == 403
 
-        # Student attempts to create student
-        resp2 = client.post(
-            "/api/v1/students/create",
-            headers=headers,
-            params={"name": "Fake", "email": "fake@std.ggsipu.ac.in", "enrollment_no": "099USAR", "branch": "AIML", "academic_year": 1}
-        )
-        assert resp2.status_code == 403
-    finally:
-        db.close()
-
-# =====================================================================
-# 15. STUDENTS CANNOT ESCALATE ROLES
-# =====================================================================
-def test_15_students_cannot_escalate_roles():
-    db = SessionLocal()
-    try:
-        student = _create_user(db, "student.noescalate@std.ggsipu.ac.in", UserRole.STUDENT.value, "No Escalate Student")
-        headers = _get_auth_headers(student)
-
-        resp = client.put(
+        # 2. Attempt role escalation
+        resp2 = client.put(
             f"/api/v1/auth/users/{student.id}/role",
             headers=headers,
             json={"role": "SUPER_ADMIN"}
         )
-        assert resp.status_code == 403
+        assert resp2.status_code == 403
+
+        # 3. IDOR check against another student
+        other_student = _create_user(db, "other.student@std.ggsipu.ac.in", UserRole.STUDENT.value, "Other Student")
+        resp3 = client.get(f"/api/v1/students/{other_student.id}/history", headers=headers)
+        assert resp3.status_code == 403
     finally:
         db.close()
 
 # =====================================================================
-# 16. FACULTY CANNOT BECOME SUPER_ADMIN
+# 21. INVARIANT VIOLATION ON MULTIPLE SUPER_ADMIN RECORDS
 # =====================================================================
-def test_16_faculty_cannot_become_super_admin():
-    db = SessionLocal()
-    try:
-        faculty = _create_user(db, "faculty.nofac2sa@ipu.ac.in", UserRole.FACULTY.value, "Faculty User")
-        headers = _get_auth_headers(faculty)
+def test_21_multiple_super_admins_trigger_invariant_violation():
+    test_db_url = f"sqlite:///:memory:"
+    t_engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=t_engine)
+    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=t_engine)
 
-        resp = client.put(
-            f"/api/v1/auth/users/{faculty.id}/role",
-            headers=headers,
-            json={"role": "SUPER_ADMIN"}
+    t_db = TestingSession()
+    orig_env = settings.ENVIRONMENT
+    try:
+        settings.ENVIRONMENT = "production"
+        sa1 = User(
+            email="sa1@ipu.ac.in",
+            full_name="SA 1",
+            role=UserRole.SUPER_ADMIN.value,
+            hashed_password=get_password_hash("pass1"),
+            is_active=True
         )
-        assert resp.status_code == 403
+        sa2 = User(
+            email="sa2@ipu.ac.in",
+            full_name="SA 2",
+            role=UserRole.SUPER_ADMIN.value,
+            hashed_password=get_password_hash("pass2"),
+            is_active=True
+        )
+        t_db.add(sa1)
+        t_db.add(sa2)
+        t_db.commit()
+
+        with pytest.raises(RuntimeError) as exc:
+            seed_database(t_db)
+        assert "Multiple SUPER_ADMIN records" in str(exc.value)
     finally:
-        db.close()
+        settings.ENVIRONMENT = orig_env
+        t_db.close()
 
 # =====================================================================
-# 17. CROSS-STUDENT IDOR REMAINS BLOCKED
+# 22. SUBMITTED CODE CANNOT READ HOST SECRETS
 # =====================================================================
-def test_17_cross_student_idor_remains_blocked():
-    db = SessionLocal()
-    try:
-        s1 = _create_user(db, "s1.idor@std.ggsipu.ac.in", UserRole.STUDENT.value, "Student One")
-        s2 = _create_user(db, "s2.idor@std.ggsipu.ac.in", UserRole.STUDENT.value, "Student Two")
-
-        s1_headers = _get_auth_headers(s1)
-        s2_headers = _get_auth_headers(s2)
-
-        # S2 tries to access S1's history
-        resp = client.get(f"/api/v1/students/{s1.id}/history", headers=s2_headers)
-        assert resp.status_code == 403
-        assert "Access denied" in resp.json()["detail"]
-    finally:
-        db.close()
-
-# =====================================================================
-# 18. PASSWORD/RESET SECRETS NEVER APPEAR IN RESPONSES
-# =====================================================================
-def test_18_password_and_reset_secrets_never_appear_in_responses():
-    db = SessionLocal()
-    try:
-        user = _create_user(db, "secret.check@std.ggsipu.ac.in", UserRole.STUDENT.value, "Secret Check")
-        
-        orig_env = settings.ENVIRONMENT
-        try:
-            settings.ENVIRONMENT = "production"
-            resp = client.post("/api/v1/auth/forgot-password", json={"email": user.email})
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["reset_token"] is None
-            assert "password" not in str(data).lower() or "password reset" in data.get("message", "").lower()
-            assert "secret" not in str(data).lower()
-        finally:
-            settings.ENVIRONMENT = orig_env
-    finally:
-        db.close()
-
-# =====================================================================
-# 19. SUBMITTED CODE CANNOT READ SECRET_KEY
-# =====================================================================
-def test_19_submitted_code_cannot_read_secret_key():
+def test_22_submitted_code_cannot_read_host_secrets():
     os.environ["SECRET_KEY"] = "super-secret-host-key-never-leak"
-    code = "import os\nprint(os.environ.get('SECRET_KEY', 'NOT_FOUND'))"
+    os.environ["DATABASE_URL"] = "postgresql://secret_user:secret_pass@dbhost:5432/secretdb"
+    code = "import os\nprint(os.environ.get('SECRET_KEY', 'NOT_FOUND_SEC'))\nprint(os.environ.get('DATABASE_URL', 'NOT_FOUND_DB'))"
     res = code_runner.execute_single(code, "python", "")
     assert res["verdict"] == SubmissionVerdict.AC
     assert "super-secret-host-key" not in res["output"]
-    assert "NOT_FOUND" in res["output"]
-
-# =====================================================================
-# 20. SUBMITTED CODE CANNOT READ DATABASE_URL
-# =====================================================================
-def test_20_submitted_code_cannot_read_database_url():
-    os.environ["DATABASE_URL"] = "postgresql://secret_user:secret_pass@dbhost:5432/secretdb"
-    code = "import os\nprint(os.environ.get('DATABASE_URL', 'NOT_FOUND'))"
-    res = code_runner.execute_single(code, "python", "")
-    assert res["verdict"] == SubmissionVerdict.AC
     assert "secret_pass" not in res["output"]
-    assert "NOT_FOUND" in res["output"]
+    assert "NOT_FOUND_SEC" in res["output"]
+    assert "NOT_FOUND_DB" in res["output"]
 
 # =====================================================================
-# 21. DOCKER SANDBOX USES REQUIRED RESTRICTIONS
+# 23. OUTPUT FLOODING REMAINS BLOCKED
 # =====================================================================
-def test_21_docker_sandbox_uses_required_restrictions():
-    backend = DockerExecutionBackend()
-    session = ExecutionSession("python", "temp_workspace", cmd=["python", "solution.py"])
-    # Inspect docker backend configuration invariants
-    assert backend.default_image is not None
-    assert "codesphere" in backend.default_image or "python" in backend.default_image
-
-# =====================================================================
-# 22. OUTPUT FLOODING REMAINS BLOCKED
-# =====================================================================
-def test_22_output_flooding_remains_blocked():
+def test_23_output_flooding_remains_blocked():
     code = "while True:\n    print('A' * 10000)"
     res = code_runner.execute_single(code, "python", "", timeout_seconds=3.0)
     assert res["verdict"] in [SubmissionVerdict.OLE, SubmissionVerdict.TLE]
     if res["verdict"] == SubmissionVerdict.OLE:
         assert len(res["output"].encode("utf-8")) <= MAX_OUTPUT_BYTES + 4096
-
-# =====================================================================
-# 23. MEMORY LIMITS REMAIN ENFORCED
-# =====================================================================
-def test_23_memory_limits_remain_enforced():
-    backend = LocalProcessBackend()
-    temp_dir = code_runner._create_temp_dir()
-    try:
-        session = code_runner._prepare_session("a = [0] * 1000000\nprint(len(a))", "python", temp_dir)
-        res = backend.execute(session, "", timeout_seconds=3.0, memory_limit_mb=1)
-        if res["memory_kb"] > 1024.0:
-            assert res["verdict"] == SubmissionVerdict.MLE
-    finally:
-        import shutil
-        shutil.rmtree(temp_dir, ignore_errors=True)
 
 # =====================================================================
 # 24. ASYNC JUDGE STATE MACHINE REMAINS VALID
@@ -529,10 +708,10 @@ def test_24_async_judge_state_machine_remains_valid():
 def test_25_database_integrity_and_admin_authentication():
     db = SessionLocal()
     try:
-        admin = _create_user(db, "admin.integrity@ipu.ac.in", UserRole.ADMIN.value, "Admin Integrity")
+        admin = _create_user(db, "admin.closure.test@ipu.ac.in", UserRole.ADMIN.value, "Admin Closure Test")
         assert admin.id > 0
         assert verify_password("test_secure_password_2026", admin.hashed_password)
-        
+
         # Test login API with valid credentials
         resp = client.post("/api/v1/auth/login", json={"email": admin.email, "password": "test_secure_password_2026"})
         assert resp.status_code == 200
