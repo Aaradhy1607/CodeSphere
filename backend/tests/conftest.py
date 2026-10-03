@@ -11,7 +11,7 @@ def setup_test_suite_fixtures():
     try:
         # 1. Staff Allowlist for test assertions
         staff_allowlist = [
-            {"email": "placement@ipu.ac.in", "name": "Placement Cell Operations Admin", "role": UserRole.ADMIN.value},
+            {"email": "placement@ipu.ac.in", "name": "Placement Cell Operations Admin", "role": UserRole.SUPER_ADMIN.value},
             {"email": "admin@ipu.ac.in", "name": "Placement Cell Operations Admin", "role": UserRole.ADMIN.value},
             {"email": "usar.tnp@ipu.ac.in", "name": "USAR Placement Head", "role": UserRole.ADMIN.value},
             {"email": "tnp.officer@ipu.ac.in", "name": "USAR Placement Coordinator", "role": UserRole.PLACEMENT_ADMIN.value},
@@ -37,7 +37,7 @@ def setup_test_suite_fixtures():
             {
                 "email": "placement@ipu.ac.in",
                 "full_name": "Placement Operations Admin",
-                "role": UserRole.ADMIN.value,
+                "role": UserRole.SUPER_ADMIN.value,
                 "password": "admin123"
             },
             {

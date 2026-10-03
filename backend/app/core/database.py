@@ -6,9 +6,20 @@ from app.core.config import settings
 
 logger = logging.getLogger("codesphere.database")
 
+def normalize_db_url(url: str) -> str:
+    """Ensures PostgreSQL URLs use the supported psycopg2 dialect driver."""
+    if not url:
+        return url
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+    if url.startswith("postgresql://") and not url.startswith("postgresql+"):
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    return url
+
 # Configure engine arguments based on database dialect
-is_sqlite = settings.DATABASE_URL.startswith("sqlite")
-is_postgres = settings.DATABASE_URL.startswith("postgresql") or settings.DATABASE_URL.startswith("postgres")
+normalized_db_url = normalize_db_url(settings.DATABASE_URL)
+is_sqlite = normalized_db_url.startswith("sqlite")
+is_postgres = normalized_db_url.startswith("postgresql") or normalized_db_url.startswith("postgres")
 
 if is_sqlite:
     if settings.ENVIRONMENT.lower() in ["production", "prod", "staging"]:
@@ -32,7 +43,7 @@ else:
         "pool_pre_ping": settings.DB_POOL_PRE_PING,
     }
 
-engine = create_engine(settings.DATABASE_URL, **engine_kwargs)
+engine = create_engine(normalized_db_url, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -68,18 +79,19 @@ def check_db_health() -> dict:
             "dialect": engine.dialect.name
         }
 
-def auto_migrate_db():
+def auto_migrate_db(target_engine=None):
     """
     Lightweight SQLite schema auto-migrator for new columns without dropping existing data.
     For PostgreSQL in production, Alembic migrations are used.
     """
+    active_engine = target_engine or engine
     # Always ensure all tables are created
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=active_engine)
     
-    if not settings.DATABASE_URL.startswith("sqlite"):
+    if active_engine.dialect.name != "sqlite":
         return
     
-    with engine.connect() as conn:
+    with active_engine.connect() as conn:
         # Check users table columns
         try:
             result = conn.exec_driver_sql("PRAGMA table_info(users)").fetchall()

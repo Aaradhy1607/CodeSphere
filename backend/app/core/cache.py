@@ -167,7 +167,7 @@ class CacheManager:
         if self.is_redis_available and self.redis_client:
             try:
                 serialized = json.dumps(value, default=str)
-                self.redis_client.setex(full_key, expiry, serialized)
+                self.redis_client.set(full_key, serialized, ex=expiry)
                 return True
             except Exception as e:
                 logger.warning(f"Redis SET failed for key {key}: {e}. Switching to in-memory fallback.")
@@ -178,9 +178,13 @@ class CacheManager:
 
     def delete(self, key: str) -> bool:
         full_key = f"{settings.CACHE_PREFIX}{key}"
+        deleted = False
         if self.is_redis_available and self.redis_client:
             try:
-                self.redis_client.delete(full_key)
+                res = self.redis_client.delete(full_key)
+                deleted = bool(res > 0)
+                self.in_memory_fallback.delete(full_key)
+                return deleted
             except Exception as e:
                 logger.warning(f"Redis DELETE failed for key {key}: {e}")
                 self.is_redis_available = False
@@ -194,11 +198,12 @@ class CacheManager:
                 keys = self.redis_client.keys(full_pattern)
                 if keys:
                     count = self.redis_client.delete(*keys)
+                self.in_memory_fallback.delete_pattern(full_pattern)
+                return count
             except Exception as e:
                 logger.warning(f"Redis delete_pattern failed for {pattern}: {e}")
                 self.is_redis_available = False
-        mem_count = self.in_memory_fallback.delete_pattern(full_pattern)
-        return count or mem_count
+        return self.in_memory_fallback.delete_pattern(full_pattern)
 
     def check_health(self) -> dict:
         if not settings.CACHE_ENABLED:

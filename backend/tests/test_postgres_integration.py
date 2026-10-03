@@ -13,6 +13,12 @@ POSTGRES_URL = os.getenv("POSTGRES_TEST_DATABASE_URL") or os.getenv("TEST_DATABA
 if not POSTGRES_URL and os.getenv("DATABASE_URL", "").startswith("postgresql"):
     POSTGRES_URL = os.getenv("DATABASE_URL")
 
+if POSTGRES_URL:
+    if POSTGRES_URL.startswith("postgres://"):
+        POSTGRES_URL = POSTGRES_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif POSTGRES_URL.startswith("postgresql://") and not POSTGRES_URL.startswith("postgresql+"):
+        POSTGRES_URL = POSTGRES_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+
 @pytest.mark.skipif(not POSTGRES_URL, reason="PostgreSQL test database URL not configured (set POSTGRES_TEST_DATABASE_URL to enable)")
 def test_postgres_schema_creation_and_migrations():
     """Verify clean PostgreSQL schema initialization and auto-migration."""

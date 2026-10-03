@@ -391,6 +391,15 @@ class DockerExecutionBackend(BaseExecutionBackend):
     def is_docker_active(self) -> bool:
         return self._docker_available
 
+    def is_image_available(self, image: str) -> bool:
+        if not self._docker_available:
+            return False
+        try:
+            res = subprocess.run(["docker", "image", "inspect", image], capture_output=True, timeout=2.0)
+            return res.returncode == 0
+        except Exception:
+            return False
+
     def _get_image_for_lang(self, lang: str) -> str:
         lang_map = {
             "python": "python:3.11-slim",
@@ -420,13 +429,15 @@ class DockerExecutionBackend(BaseExecutionBackend):
                 "backend": "docker" if self._docker_available else "local_process"
             }
 
-        # If Docker daemon is unavailable, delegate cleanly or fail closed based on policy
-        if not self._docker_available:
+        image = self._get_image_for_lang(session.lang)
+
+        # If Docker daemon or required image is unavailable, delegate cleanly to fallback or fail closed based on policy
+        if not self._docker_available or not self.is_image_available(image):
             if settings.REQUIRE_DOCKER_SANDBOX and not settings.ALLOW_LOCAL_PROCESS_FALLBACK:
                 return {
                     "verdict": SubmissionVerdict.RE,
                     "output": "",
-                    "error": "Execution rejected: Docker container sandboxing is mandatory in this production environment, but the Docker daemon is unreachable.",
+                    "error": f"Execution rejected: Docker container sandboxing is mandatory in this production environment, but Docker daemon or image '{image}' is unavailable.",
                     "time_ms": 0.0,
                     "memory_kb": 0.0,
                     "backend": "docker_unavailable_fail_closed"
@@ -436,7 +447,6 @@ class DockerExecutionBackend(BaseExecutionBackend):
             return res
 
         container_id = f"codesphere_eval_{uuid.uuid4().hex[:12]}"
-        image = self._get_image_for_lang(session.lang)
         abs_temp = os.path.abspath(session.temp_dir)
 
         # Build hardened docker run invocation
@@ -459,7 +469,15 @@ class DockerExecutionBackend(BaseExecutionBackend):
         ]
 
         # Append execution command
-        if session.lang in ["python", "py"]:
+        if session.cmd:
+            adapted_cmd = []
+            for arg in session.cmd:
+                if arg == sys.executable or arg.endswith("python") or arg.endswith("python.exe"):
+                    adapted_cmd.append("python")
+                else:
+                    adapted_cmd.append(arg)
+            docker_cmd.extend(adapted_cmd)
+        elif session.lang in ["python", "py"]:
             docker_cmd.extend(["python", "-u", "solution.py"])
         elif session.lang in ["cpp", "c"]:
             docker_cmd.extend(["./solution" if os.name != 'nt' else "./solution.exe"])
@@ -471,7 +489,7 @@ class DockerExecutionBackend(BaseExecutionBackend):
         elif session.lang in ["javascript", "js"]:
             docker_cmd.extend(["node", f"--max-old-space-size={memory_limit_mb}", "solution.js"])
         else:
-            docker_cmd.extend(session.cmd or ["python", "solution.py"])
+            docker_cmd.extend(["python", "solution.py"])
 
         clean_input = input_data if (not input_data or input_data.endswith("\n")) else f"{input_data}\n"
         input_bytes = clean_input.encode("utf-8")
