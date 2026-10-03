@@ -98,7 +98,7 @@ int main() {
 """
         else:
             test_code = """#include <iostream>
-int main() { int x = 0; if (std::cin >> x) std::cout << (x + 1) << std::endl; return 0; }
+int main() { int a, b; if (std::cin >> a >> b) std::cout << (a + b) << std::endl; return 0; }
 """
         res = code_runner.evaluate_test_cases(test_code, lang, [{"id": 1, "input_data": "7 8\n", "expected_output": "15", "points": 10, "is_hidden": False}])
         return res.get("verdict") in (SubmissionVerdict.AC, SubmissionVerdict.AC.value) and res.get("passed_count", 0) == 1

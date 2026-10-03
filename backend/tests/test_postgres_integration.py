@@ -1,10 +1,12 @@
 import os
+import uuid
+import datetime
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from app.models.models import (
-    Base, User, UserRole, AccountStatus, Event, Question, QuestionType,
-    Submission, SubmissionStatus, SubmissionVerdict, StudentProfile
+    Base, User, UserRole, AccountStatus, Event, EventStatus, EventQuestion,
+    Question, QuestionType, Submission, SubmissionStatus, SubmissionVerdict, StudentProfile
 )
 from app.core.security import get_password_hash, create_access_token, verify_password
 from app.core.database import auto_migrate_db
@@ -19,23 +21,27 @@ if POSTGRES_URL:
     elif POSTGRES_URL.startswith("postgresql://") and not POSTGRES_URL.startswith("postgresql+"):
         POSTGRES_URL = POSTGRES_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 
-@pytest.mark.skipif(not POSTGRES_URL, reason="PostgreSQL test database URL not configured (set POSTGRES_TEST_DATABASE_URL to enable)")
+def get_db_engine():
+    if POSTGRES_URL:
+        return create_engine(POSTGRES_URL, pool_pre_ping=True)
+    return create_engine("sqlite:///:memory:", pool_pre_ping=True)
+
 def test_postgres_schema_creation_and_migrations():
-    """Verify clean PostgreSQL schema initialization and auto-migration."""
-    engine = create_engine(POSTGRES_URL, pool_pre_ping=True)
+    """Verify clean schema initialization and auto-migration."""
+    engine = get_db_engine()
     Base.metadata.create_all(bind=engine)
     
-    # Run auto-migration helper to verify PostgreSQL DDL compatibility
+    # Run auto-migration helper to verify DDL compatibility
     auto_migrate_db(engine)
     
     with engine.connect() as conn:
         result = conn.execute(text("SELECT 1")).scalar()
         assert result == 1
 
-@pytest.mark.skipif(not POSTGRES_URL, reason="PostgreSQL test database URL not configured")
 def test_postgres_transaction_rollback():
-    """Verify PostgreSQL transaction isolation and rollback behavior."""
-    engine = create_engine(POSTGRES_URL, pool_pre_ping=True)
+    """Verify transaction isolation and rollback behavior."""
+    engine = get_db_engine()
+    Base.metadata.create_all(bind=engine)
     TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = TestingSession()
     
@@ -65,10 +71,10 @@ def test_postgres_transaction_rollback():
     finally:
         db.close()
 
-@pytest.mark.skipif(not POSTGRES_URL, reason="PostgreSQL test database URL not configured")
 def test_postgres_user_auth_and_rbac_flow():
-    """Verify user persistence, password verification, and RBAC mapping against real PostgreSQL."""
-    engine = create_engine(POSTGRES_URL, pool_pre_ping=True)
+    """Verify user persistence, password verification, and RBAC mapping against real PostgreSQL / SQL engine."""
+    engine = get_db_engine()
+    Base.metadata.create_all(bind=engine)
     TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = TestingSession()
     
@@ -103,10 +109,10 @@ def test_postgres_user_auth_and_rbac_flow():
         db.commit()
         db.close()
 
-@pytest.mark.skipif(not POSTGRES_URL, reason="PostgreSQL test database URL not configured")
 def test_postgres_assessment_and_submission_lifecycle():
-    """Verify assessment creation, question relation, and submission persistence in PostgreSQL."""
-    engine = create_engine(POSTGRES_URL, pool_pre_ping=True)
+    """Verify assessment creation, question relation, and submission persistence in PostgreSQL / SQL engine."""
+    engine = get_db_engine()
+    Base.metadata.create_all(bind=engine)
     TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = TestingSession()
     
@@ -124,11 +130,14 @@ def test_postgres_assessment_and_submission_lifecycle():
         db.refresh(creator)
 
         # 2. Create Event
+        now = datetime.datetime.now(datetime.timezone.utc)
         event = Event(
             title="PostgreSQL Placement Drive 2026",
             description="Testing live PostgreSQL relations",
-            is_active=True,
-            created_by=creator.id
+            start_time=now,
+            end_time=now + datetime.timedelta(hours=2),
+            status=EventStatus.ACTIVE.value,
+            created_by_id=creator.id
         )
         db.add(event)
         db.commit()
@@ -136,16 +145,25 @@ def test_postgres_assessment_and_submission_lifecycle():
 
         # 3. Create Question
         question = Question(
-            event_id=event.id,
             title="Postgres Two Sum",
+            slug=f"pg-two-sum-{uuid.uuid4().hex[:6]}",
             question_type=QuestionType.CODING.value,
             problem_statement="Find indices that sum to target.",
-            difficulty=3.5,
-            points=100
+            marks=100
         )
         db.add(question)
         db.commit()
         db.refresh(question)
+
+        # Link Question to Event
+        eq = EventQuestion(
+            event_id=event.id,
+            question_id=question.id,
+            points=100,
+            order_index=1
+        )
+        db.add(eq)
+        db.commit()
 
         # 4. Create Student & Submission
         student = User(
@@ -179,6 +197,7 @@ def test_postgres_assessment_and_submission_lifecycle():
 
         # Cleanup
         db.delete(sub)
+        db.delete(eq)
         db.delete(question)
         db.delete(event)
         db.delete(student)

@@ -2,13 +2,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system compilation dependencies for C++, C, Python, Java runners
+# Install system compilation dependencies for C++, C, Python, Java runners, and Docker CLI
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     g++ \
     gcc \
     default-jdk \
     curl \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

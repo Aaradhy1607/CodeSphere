@@ -60,11 +60,14 @@ services:
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY environment variable required}
       INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:?INITIAL_ADMIN_EMAIL environment variable required}
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:?INITIAL_ADMIN_PASSWORD environment variable required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       STUDENT_EMAIL_DOMAIN: ${STUDENT_EMAIL_DOMAIN:-std.ggsipu.ac.in}
       ADMIN_EMAIL_DOMAIN: ${ADMIN_EMAIL_DOMAIN:-ipu.ac.in}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     ports:
       - "8000:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy

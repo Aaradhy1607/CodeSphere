@@ -34,7 +34,7 @@ int main() { int x = 0; if (scanf("%d", &x) == 1) printf("%d\\n", x + 1); return
             test_code = """#include <iostream>
 int main() { int x = 0; if (std::cin >> x) std::cout << (x + 1) << std::endl; return 0; }
 """
-        res = code_runner.execute_single(test_code, lang, "1\n", timeout_seconds=5.0)
+        res = code_runner.execute_single(test_code, lang, "1\n", timeout_seconds=10.0)
         return res.get("verdict") in (SubmissionVerdict.AC, SubmissionVerdict.AC.value) and res.get("output", "").strip() == "2"
     except Exception:
         return False

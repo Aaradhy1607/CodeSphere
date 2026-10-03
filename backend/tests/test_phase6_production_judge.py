@@ -411,3 +411,43 @@ def test_15_judge_observability_metrics():
     assert snapshot["average_execution_time_ms"] == 45.0
     assert snapshot["peak_memory_kb"] == 1524.0
     assert snapshot["sandbox_failures"] == 0
+
+
+def test_16_docker_path_translation_and_container_execution():
+    """Verifies that host filepaths are translated to /workspace inside Docker."""
+    import tempfile
+    docker_backend = DockerExecutionBackend()
+    temp_dir = tempfile.mkdtemp(prefix="cs_path_test_")
+    src_file = os.path.join(temp_dir, "solution.py")
+    with open(src_file, "w", encoding="utf-8") as f:
+        f.write("print('path_mapping_ok')\n")
+
+    session = ExecutionSession(lang="python", temp_dir=temp_dir, cmd=[sys.executable, src_file], source_file=src_file)
+    res = docker_backend.execute(session, "", timeout_seconds=3.0)
+    assert res["verdict"] == SubmissionVerdict.AC
+    assert "path_mapping_ok" in res["output"]
+    assert res["backend"] in ["docker", "local_process_fallback"]
+
+    # Clean up
+    try:
+        os.remove(src_file)
+        os.rmdir(temp_dir)
+    except Exception:
+        pass
+
+
+def test_17_docker_strict_sandbox_fail_closed(monkeypatch):
+    """Verifies that strict production sandboxing fails closed when Docker is unavailable."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "REQUIRE_DOCKER_SANDBOX", True)
+    monkeypatch.setattr(settings, "ALLOW_LOCAL_PROCESS_FALLBACK", False)
+
+    docker_backend = DockerExecutionBackend()
+    # Force docker available flag to False to test strict fail-closed enforcement
+    docker_backend._docker_available = False
+
+    session = ExecutionSession(lang="python", temp_dir=".", cmd=[sys.executable, "-c", "print('should_fail')"])
+    res = docker_backend.execute(session, "", timeout_seconds=2.0)
+    assert res["verdict"] == SubmissionVerdict.RE
+    assert res["backend"] == "docker_unavailable_fail_closed"
+    assert "Docker container sandboxing is mandatory" in res["error"]

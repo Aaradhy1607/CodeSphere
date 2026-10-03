@@ -210,7 +210,7 @@ class LocalProcessBackend(BaseExecutionBackend):
         input_bytes = clean_input.encode("utf-8")
 
         # Setup process
-        creationflags = 0
+        creationflags = 0x08000000 if self.is_windows else 0
         preexec = None
         if not self.is_windows:
             preexec = os.setsid
@@ -468,28 +468,43 @@ class DockerExecutionBackend(BaseExecutionBackend):
             image,
         ]
 
-        # Append execution command
+        # Append execution command mapping host paths to /workspace paths
         if session.cmd:
             adapted_cmd = []
             for arg in session.cmd:
-                if arg == sys.executable or arg.endswith("python") or arg.endswith("python.exe"):
+                arg_str = str(arg)
+                # Map host python/node/java executables to standard container binaries
+                if arg_str == sys.executable or arg_str.endswith("python") or arg_str.endswith("python.exe"):
                     adapted_cmd.append("python")
+                elif os.path.basename(arg_str).lower() in ["java", "java.exe"]:
+                    adapted_cmd.append("java")
+                elif os.path.basename(arg_str).lower() in ["node", "node.exe"]:
+                    adapted_cmd.append("node")
+                # Map any absolute host temp_dir paths into container /workspace paths
+                elif os.path.abspath(arg_str).startswith(abs_temp):
+                    rel = os.path.relpath(arg_str, abs_temp).replace("\\", "/")
+                    adapted_cmd.append(f"/workspace/{rel}")
+                elif arg_str == abs_temp:
+                    adapted_cmd.append("/workspace")
+                elif arg_str.endswith(".exe") and session.lang in ["c", "cpp"]:
+                    bin_name = os.path.basename(arg_str)[:-4]
+                    adapted_cmd.append(f"/workspace/{bin_name}")
                 else:
-                    adapted_cmd.append(arg)
+                    adapted_cmd.append(arg_str)
             docker_cmd.extend(adapted_cmd)
-        elif session.lang in ["python", "py"]:
-            docker_cmd.extend(["python", "-u", "solution.py"])
-        elif session.lang in ["cpp", "c"]:
-            docker_cmd.extend(["./solution" if os.name != 'nt' else "./solution.exe"])
+        elif session.lang in ["python", "py", "python3"]:
+            docker_cmd.extend(["python", "-I", "-B", "/workspace/solution.py"])
+        elif session.lang in ["cpp", "c++", "c"]:
+            docker_cmd.extend(["/workspace/solution"])
         elif session.lang in ["java"]:
             class_name = "Solution"
-            if os.path.exists(os.path.join(session.temp_dir, "Main.java")):
+            if os.path.exists(os.path.join(session.temp_dir, "Main.java")) or os.path.exists(os.path.join(session.temp_dir, "Main.class")):
                 class_name = "Main"
-            docker_cmd.extend(["java", f"-Xmx{memory_limit_mb}m", "-cp", "/workspace", class_name])
-        elif session.lang in ["javascript", "js"]:
-            docker_cmd.extend(["node", f"--max-old-space-size={memory_limit_mb}", "solution.js"])
+            docker_cmd.extend(["java", f"-Xmx{memory_limit_mb}m", "-Dfile.encoding=UTF-8", "-cp", "/workspace", class_name])
+        elif session.lang in ["javascript", "js", "node", "nodejs"]:
+            docker_cmd.extend(["node", f"--max-old-space-size={memory_limit_mb}", "/workspace/solution.js"])
         else:
-            docker_cmd.extend(["python", "solution.py"])
+            docker_cmd.extend(["python", "/workspace/solution.py"])
 
         clean_input = input_data if (not input_data or input_data.endswith("\n")) else f"{input_data}\n"
         input_bytes = clean_input.encode("utf-8")
@@ -699,15 +714,13 @@ class SandboxedCodeRunner:
         # 2. C++ (G++ with C++17)
         elif lang in ["cpp", "c++"]:
             src_path = os.path.join(temp_dir, "solution.cpp")
-            exe_path = os.path.join(temp_dir, "solution.exe" if self.is_windows else "solution")
+            exe_path = os.path.join(temp_dir, "a.exe" if self.is_windows else "a.out")
             with open(src_path, "w", encoding="utf-8") as f:
                 f.write(code)
 
             gpp_bin = self._find_bin("g++")
             try:
                 compile_cmd = [gpp_bin, "-O2", "-std=c++17", src_path, "-o", exe_path]
-                if self.is_windows:
-                    compile_cmd.extend(["-static", "-static-libgcc", "-static-libstdc++"])
                 compile_proc = subprocess.run(
                     compile_cmd,
                     capture_output=True,
@@ -728,7 +741,7 @@ class SandboxedCodeRunner:
         # 3. C (GCC with C11 - Pure C mode)
         elif lang in ["c"]:
             src_path = os.path.join(temp_dir, "solution.c")
-            exe_path = os.path.join(temp_dir, "solution.exe" if self.is_windows else "solution")
+            exe_path = os.path.join(temp_dir, "a.exe" if self.is_windows else "a.out")
             with open(src_path, "w", encoding="utf-8") as f:
                 f.write(code)
 
@@ -741,11 +754,8 @@ class SandboxedCodeRunner:
                     gcc_bin = clang_bin
 
             try:
-                # Compile strictly as C (C11 standard)
                 compile_cmd = [gcc_bin, "-O2", "-std=c11", src_path, "-o", exe_path]
-                if self.is_windows:
-                    compile_cmd.extend(["-static", "-static-libgcc"])
-                else:
+                if not self.is_windows:
                     compile_cmd.append("-lm")
                 compile_proc = subprocess.run(
                     compile_cmd,
@@ -823,7 +833,12 @@ class SandboxedCodeRunner:
         return self.backend.execute(session, input_data, timeout_seconds=to)
 
     def _create_temp_dir(self, prefix: str = "codesphere_run_") -> str:
-        return tempfile.mkdtemp(prefix=prefix)
+        runner_base = getattr(settings, "CODE_RUNNER_TEMP_DIR", None) or os.getenv("CODE_RUNNER_TEMP_DIR")
+        if not runner_base and self.is_windows:
+            backend_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            runner_base = os.path.join(backend_root, ".runner_tmp")
+            os.makedirs(runner_base, exist_ok=True)
+        return tempfile.mkdtemp(prefix=prefix, dir=runner_base)
 
     def execute_single(
         self,

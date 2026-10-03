@@ -57,6 +57,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Pre-pull Sandboxed Runner Docker Images
+        run: |
+          docker pull python:3.11-slim
+          docker pull gcc:13
+          docker pull openjdk:17-slim
+          docker pull node:20-slim
+
       - name: Run Backend Pytest Suite & Coverage
         working-directory: ./backend
         env:

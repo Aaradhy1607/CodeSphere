@@ -30,6 +30,7 @@ env/
 *.log
 *.exe
 .tmp_test/
+.runner_tmp/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
