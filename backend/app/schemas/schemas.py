@@ -119,11 +119,6 @@ class AdminAllowlistOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class DemoSwitchRequest(BaseModel):
-    user_id: Optional[int] = None
-    role: Optional[str] = None
-    email: Optional[str] = None
-
 # ================= TEST CASE SCHEMAS =================
 class TestCaseBase(BaseModel):
     input_data: str

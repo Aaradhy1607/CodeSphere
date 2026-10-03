@@ -142,19 +142,22 @@ docker compose -f docker-compose.yml up --build -d
 
 ## 🧪 Testing & Verification Gate
 
-Run the complete release gates and full regression suite:
+Run the complete release gates, PostgreSQL/Redis integration suites, and full regression test suite:
 
 ```bash
-# Backend test suite (235+ tests)
+# Backend test suite (239+ tests) with coverage
 cd backend
-python -m pytest tests/ -v
+python -m pytest tests/ -v --cov=app --cov-report=term-missing
 
-# Specific master hardening & release gate suite
+# Specific master hardening, PostgreSQL & Redis integration, and release gates
 python -m pytest tests/test_master_production_hardening.py -v
+python -m pytest tests/test_redis_integration.py -v
 python -m pytest tests/test_final_release_gate.py -v
+python -m pytest tests/test_final_security_closure.py -v
 
 # Frontend TypeScript check & production build
 cd ../frontend
+npm ci
 npx tsc --noEmit
 npm run build
 ```

@@ -898,12 +898,12 @@ def test_30_production_seeder_and_demo_switch_isolation():
     try:
         settings.ENVIRONMENT = "production"
         
-        # /auth/demo-users must be forbidden in production
+        # /auth/demo-users must be completely removed from production
         resp_demo_users = client.get("/api/v1/auth/demo-users")
-        assert resp_demo_users.status_code == 403
+        assert resp_demo_users.status_code in (404, 405)
 
-        # /auth/demo-switch must be forbidden in production
+        # /auth/demo-switch must be completely removed from production
         resp_demo_switch = client.post("/api/v1/auth/demo-switch", json={"role": "STUDENT"})
-        assert resp_demo_switch.status_code == 403
+        assert resp_demo_switch.status_code in (404, 405)
     finally:
         settings.ENVIRONMENT = orig_env

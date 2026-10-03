@@ -51,14 +51,14 @@ def run_production_smoke_test():
         assert me_data["email"].lower() == email, f"Unexpected email: {me_data.get('email')}"
         print(f"  /auth/me Verification:  SUCCESS (Role: {me_data['role']}, Email: {me_data['email']})")
 
-        # 4. Verify Demo Endpoints Blocked (403 Forbidden in Production)
+        # 4. Verify Demo Endpoints Completely Removed (404/405)
         demo_users_res = client.get(f"{settings.API_V1_STR}/auth/demo-users")
-        assert demo_users_res.status_code == 403, f"demo-users returned {demo_users_res.status_code}, expected 403"
-        print(f"  /auth/demo-users:       BLOCKED (403 Forbidden)")
+        assert demo_users_res.status_code in (404, 405), f"demo-users returned {demo_users_res.status_code}, expected 404/405"
+        print(f"  /auth/demo-users:       DECOMMISSIONED & REMOVED ({demo_users_res.status_code})")
 
         demo_switch_res = client.post(f"{settings.API_V1_STR}/auth/demo-switch", json={"role": "STUDENT"})
-        assert demo_switch_res.status_code == 403, f"demo-switch returned {demo_switch_res.status_code}, expected 403"
-        print(f"  /auth/demo-switch:      BLOCKED (403 Forbidden)")
+        assert demo_switch_res.status_code in (404, 405), f"demo-switch returned {demo_switch_res.status_code}, expected 404/405"
+        print(f"  /auth/demo-switch:      DECOMMISSIONED & REMOVED ({demo_switch_res.status_code})")
 
         # 5. Verify Invalid & Expired Token Rejection
         invalid_res = client.get(f"{settings.API_V1_STR}/auth/me", headers={"Authorization": "Bearer invalid.token.payload"})

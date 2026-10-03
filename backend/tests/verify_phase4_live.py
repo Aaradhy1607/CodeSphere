@@ -1,12 +1,9 @@
-"""
-Live Runtime End-to-End Verification of Phase 4 Question Engine
-Exercises all 20+ requirements with real HTTP network requests against FastAPI.
-"""
 import io
+import os
 import uuid
 import requests
 
-BASE_URL = "http://127.0.0.1:8000/api/v1"
+BASE_URL = os.getenv("VERIFY_BASE_URL", "http://127.0.0.1:8000/api/v1")
 
 def login(email, password):
     resp = requests.post(f"{BASE_URL}/auth/login", json={"email": email, "password": password})
@@ -19,10 +16,11 @@ def main():
     print("============================================================")
 
     # 1. AUTHENTICATE ROLES
-    admin_token = login("admin@ipu.ac.in", "admin123")
-    setter_token = login("setter.ai@ipu.ac.in", "setter123")
-    reviewer_token = login("reviewer.cs@ipu.ac.in", "reviewer123")
-    student_token = login("aarav.patel@std.ggsipu.ac.in", "student123")
+    admin_pw = os.getenv("VERIFY_ADMIN_PASSWORD", "admin123")
+    admin_token = login(os.getenv("VERIFY_ADMIN_EMAIL", "admin@ipu.ac.in"), admin_pw)
+    setter_token = login(os.getenv("VERIFY_SETTER_EMAIL", "setter.ai@ipu.ac.in"), os.getenv("VERIFY_SETTER_PASSWORD", "setter123"))
+    reviewer_token = login(os.getenv("VERIFY_REVIEWER_EMAIL", "reviewer.cs@ipu.ac.in"), os.getenv("VERIFY_REVIEWER_PASSWORD", "reviewer123"))
+    student_token = login(os.getenv("VERIFY_STUDENT_EMAIL", "aarav.patel@std.ggsipu.ac.in"), os.getenv("VERIFY_STUDENT_PASSWORD", "student123"))
     print("[PASS] Authenticated Admin, Question Setter, Reviewer, and Student roles")
 
     # 2. IMAGE UPLOAD VALIDATION & SECURITY

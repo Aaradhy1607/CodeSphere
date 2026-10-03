@@ -21,7 +21,7 @@ from app.models.models import (
 from app.schemas.schemas import (
     LoginRequest, GoogleAuthRequest, StudentOnboardingRequest,
     AdminAllowlistCreate, AdminAllowlistOut,
-    DemoSwitchRequest, Token, UserOut,
+    Token, UserOut,
     RefreshTokenRequest, PasswordResetRequest, PasswordResetConfirmRequest,
     ChangePasswordRequest, UpdateUserRoleRequest, UpdateUserStatusRequest,
     AuditLogOut
@@ -647,18 +647,3 @@ def remove_admin_from_allowlist(
     db.commit()
     log_audit(db, "ADMIN_ALLOWLIST_REMOVED", admin.email, user_id=admin.id, ip_address=ip_address, status="SUCCESS", details={"target_email": admin_entry.email})
     return {"message": f"Administrator authorization for '{admin_entry.email}' revoked."}
-
-# ================= DEMO ENDPOINTS (PERMANENTLY DECOMMISSIONED) =================
-@router.get("/demo-users")
-def get_demo_users():
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Demo user switching has been permanently decommissioned in production."
-    )
-
-@router.post("/demo-switch")
-def switch_demo_user():
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Demo user switching has been permanently decommissioned in production."
-    )

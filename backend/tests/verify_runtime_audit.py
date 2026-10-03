@@ -1,3 +1,4 @@
+import os
 import urllib.request
 import json
 import sys
@@ -7,8 +8,11 @@ def run_audit():
     print(" CODESPHERE RUNTIME CONTRACT & ROUTE AUDIT")
     print("==================================================")
 
-    # 1. Login
-    login_data = json.dumps({"email": "placement@ipu.ac.in", "password": "admin123"}).encode("utf-8")
+    # 1. Login via environment credentials with test fallback
+    admin_email = os.getenv("VERIFY_ADMIN_EMAIL", "placement@ipu.ac.in")
+    admin_pass = os.getenv("VERIFY_ADMIN_PASSWORD", "admin123")
+
+    login_data = json.dumps({"email": admin_email, "password": admin_pass}).encode("utf-8")
     req = urllib.request.Request(
         "http://localhost:8000/api/v1/auth/login",
         data=login_data,
@@ -18,7 +22,7 @@ def run_audit():
         tokens = json.loads(resp.read().decode())
     token = tokens["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
-    print("[AUTH LOGIN] PASS — Obtained valid JWT access token")
+    print(f"[AUTH LOGIN] PASS — Obtained valid JWT access token for {admin_email}")
 
     # 2. Analytics Compare Contract
     req = urllib.request.Request("http://localhost:8000/api/v1/analytics/compare?student_ids=1,2,3", headers=headers)

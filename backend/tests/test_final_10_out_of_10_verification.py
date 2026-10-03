@@ -343,13 +343,13 @@ def test_n_multiple_super_admin_fails_closed():
         t_db.close()
 
 # =====================================================================
-# O. PRODUCTION HAS NO DEMO USERS AND DEMO ENDPOINTS ARE DECOMMISSIONED
+# O. PRODUCTION HAS NO DEMO USERS AND DEMO ENDPOINTS ARE COMPLETELY REMOVED
 # =====================================================================
 def test_o_demo_endpoints_decommissioned():
     res1 = client.get("/api/v1/auth/demo-users")
-    assert res1.status_code == 403
+    assert res1.status_code in (404, 405)
     res2 = client.post("/api/v1/auth/demo-switch", json={"role": "STUDENT"})
-    assert res2.status_code == 403
+    assert res2.status_code in (404, 405)
 
 # =====================================================================
 # P. PRODUCTION SANDBOX FAILS CLOSED IF DOCKER IS REQUIRED BUT UNAVAILABLE
