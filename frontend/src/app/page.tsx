@@ -23,7 +23,7 @@ import {
 
 export default function PlacementCommandCenterPage() {
   const router = useRouter();
-  const { user, login, googleLogin, completeOnboarding, needsOnboarding, isLoading, isAdmin, isSuperAdmin, logout } = useAuth();
+  const { user, login, completeOnboarding, needsOnboarding, isLoading, isAdmin, isSuperAdmin, logout } = useAuth();
   const toast = useToast();
 
   // Authentication Form States
@@ -31,12 +31,6 @@ export default function PlacementCommandCenterPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [authTab, setAuthTab] = useState<"credentials" | "student_sso">("credentials");
-
-  // Student Google SSO Modal
-  const [isStudentLoginModal, setIsStudentLoginModal] = useState(false);
-  const [studentEmailInput, setStudentEmailInput] = useState("");
-  const [studentNameInput, setStudentNameInput] = useState("");
 
   // Onboarding Modal
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
@@ -93,8 +87,8 @@ export default function PlacementCommandCenterPage() {
 
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
-      setError("Please enter your university email address.");
+    if (!email || !password) {
+      setError("Please enter both your university email address and password.");
       return;
     }
     setError(null);
@@ -108,30 +102,6 @@ export default function PlacementCommandCenterPage() {
     } catch (err: any) {
       setError(err.message || "Login failed. Please check your credentials.");
       toast.error(err.message || "Login failed.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleStudentGoogleSSO = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanEmail = studentEmailInput.trim().toLowerCase();
-    if (!cleanEmail.endsWith("@std.ggsipu.ac.in")) {
-      setError("Student domain email must end with @std.ggsipu.ac.in");
-      return;
-    }
-    setError(null);
-    setIsSubmitting(true);
-    try {
-      const res = await googleLogin(cleanEmail, studentNameInput.trim() || undefined);
-      setIsStudentLoginModal(false);
-      toast.success("Student single sign-on authenticated");
-      if (res.needs_onboarding) {
-        setIsOnboardingOpen(true);
-      }
-    } catch (err: any) {
-      setError(err.message || "Student authentication failed.");
-      toast.error(err.message || "Student authentication failed.");
     } finally {
       setIsSubmitting(false);
     }
@@ -421,138 +391,45 @@ export default function PlacementCommandCenterPage() {
                   </Alert>
                 )}
 
-                {/* Login tabs */}
-                <div className="grid grid-cols-2 gap-1 p-1 rounded-lg text-xs" style={{ backgroundColor: "var(--bg-canvas)", border: "1px solid var(--border-subtle)" }}>
-                  <button
-                    type="button"
-                    onClick={() => { setAuthTab("credentials"); setError(null); }}
-                    className="py-1.5 px-3 rounded-md font-medium transition"
-                    style={{
-                      backgroundColor: authTab === "credentials" ? "var(--bg-surface)" : "transparent",
-                      color: authTab === "credentials" ? "var(--text-primary)" : "var(--text-muted)",
-                      fontWeight: authTab === "credentials" ? 600 : 400,
-                      boxShadow: authTab === "credentials" ? "0 1px 2px rgba(0,0,0,0.05)" : "none"
-                    }}
+                <form onSubmit={handlePasswordLogin} className="space-y-3.5">
+                  <Input
+                    label="University Email Address"
+                    type="email"
+                    required
+                    placeholder="e.g. placement@ipu.ac.in or rollno@std.ggsipu.ac.in"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    leftIcon={<Mail className="w-4 h-4" />}
+                    helperText="Official university or student domain email"
+                  />
+
+                  <Input
+                    label="Password"
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    leftIcon={<KeyRound className="w-4 h-4" />}
+                    helperText="Enter your institutional account password"
+                  />
+
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="md"
+                    className="w-full"
+                    isLoading={isSubmitting}
                   >
-                    Email Login
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setAuthTab("student_sso"); setError(null); }}
-                    className="py-1.5 px-3 rounded-md font-medium transition"
-                    style={{
-                      backgroundColor: authTab === "student_sso" ? "var(--bg-surface)" : "transparent",
-                      color: authTab === "student_sso" ? "var(--text-primary)" : "var(--text-muted)",
-                      fontWeight: authTab === "student_sso" ? 600 : 400,
-                      boxShadow: authTab === "student_sso" ? "0 1px 2px rgba(0,0,0,0.05)" : "none"
-                    }}
-                  >
-                    Student Google SSO
-                  </button>
-                </div>
-
-                {authTab === "credentials" ? (
-                  <form onSubmit={handlePasswordLogin} className="space-y-3.5">
-                    <Input
-                      label="University Email Address"
-                      type="email"
-                      required
-                      placeholder="e.g. placement@ipu.ac.in or rollno@std.ggsipu.ac.in"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      leftIcon={<Mail className="w-4 h-4" />}
-                    />
-
-                    <Input
-                      label="Password"
-                      type="password"
-                      required
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      leftIcon={<KeyRound className="w-4 h-4" />}
-                      helperText="Enter your institutional account password"
-                    />
-
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      size="md"
-                      className="w-full"
-                      isLoading={isSubmitting}
-                    >
-                      Sign In to CodeSphere
-                    </Button>
-                  </form>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                      Students can authenticate using their official GGSIPU student domain email address (<code style={{ color: "var(--accent-primary)" }}>@std.ggsipu.ac.in</code>).
-                    </p>
-                    <Button
-                      variant="primary"
-                      size="md"
-                      className="w-full"
-                      onClick={() => setIsStudentLoginModal(true)}
-                      leftIcon={<GraduationCap className="w-4 h-4" />}
-                    >
-                      Authenticate with Student Domain
-                    </Button>
-                  </div>
-                )}
+                    Sign In to CodeSphere
+                  </Button>
+                </form>
               </CardContent>
             </Card>
           )}
         </div>
 
       </div>
-
-      {/* Student Domain SSO Modal */}
-      <Modal
-        isOpen={isStudentLoginModal}
-        onClose={() => setIsStudentLoginModal(false)}
-        title="Student Single Sign-On"
-        description="Authenticate with your official GGSIPU student domain email."
-        size="sm"
-      >
-        <form onSubmit={handleStudentGoogleSSO} className="space-y-3.5">
-          <Input
-            label="Full Name (Optional for first-time)"
-            type="text"
-            placeholder="e.g. Aarav Sharma"
-            value={studentNameInput}
-            onChange={(e) => setStudentNameInput(e.target.value)}
-          />
-
-          <Input
-            label="Student University Email *"
-            type="email"
-            required
-            placeholder="00119011921@std.ggsipu.ac.in"
-            value={studentEmailInput}
-            onChange={(e) => setStudentEmailInput(e.target.value)}
-            helperText="Must end with @std.ggsipu.ac.in"
-          />
-
-          <div className="flex items-center justify-end gap-2 pt-3" style={{ borderTop: "1px solid var(--border-subtle)" }}>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsStudentLoginModal(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              isLoading={isSubmitting}
-            >
-              Verify & Sign In
-            </Button>
-          </div>
-        </form>
-      </Modal>
 
       {/* Student Onboarding Modal */}
       <Modal

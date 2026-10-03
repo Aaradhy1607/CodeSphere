@@ -85,10 +85,10 @@ class AuditLogOut(BaseModel):
 
 class LoginRequest(BaseModel):
     email: str
-    password: Optional[str] = None
+    password: str = Field(..., min_length=1, description="Institutional account password")
 
 class GoogleAuthRequest(BaseModel):
-    credential: Optional[str] = None
+    credential: str = Field(..., min_length=1, description="Verified Google OIDC ID token")
     email: Optional[str] = None
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None

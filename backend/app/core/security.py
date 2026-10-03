@@ -32,10 +32,11 @@ def get_password_hash(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Verifies password with bcrypt; supports seamless migration from legacy sha256 hashes.
+    Verifies password with bcrypt; fails closed for any missing, empty, or malformed hash.
+    Supports seamless migration from legacy sha256 hashes if valid match is found.
     """
-    if not hashed_password:
-        return True
+    if not plain_password or not hashed_password or not isinstance(hashed_password, str) or not hashed_password.strip():
+        return False
     
     # Check if bcrypt hash
     if hashed_password.startswith("$2b$") or hashed_password.startswith("$2a$") or hashed_password.startswith("$2y$"):
@@ -44,11 +45,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         except Exception:
             return False
 
-    # Legacy SHA256 fallback
-    salt = "codesphere_salt_usar_2026"
-    expected_legacy = hashlib.sha256(f"{salt}{plain_password}".encode("utf-8")).hexdigest()
-    if hmac.compare_digest(expected_legacy, hashed_password):
-        return True
+    # Legacy SHA256 migration verification fallback
+    try:
+        salt = "codesphere_salt_usar_2026"
+        expected_legacy = hashlib.sha256(f"{salt}{plain_password}".encode("utf-8")).hexdigest()
+        if hmac.compare_digest(expected_legacy, hashed_password):
+            return True
+    except Exception:
+        return False
     
     return False
 

@@ -83,8 +83,14 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
             detail="Your account has been disabled. Contact University Administration."
         )
 
-    # Verify Password
-    if req.password and not verify_password(req.password, user.hashed_password):
+    # Verify Password (Strict Fail-Closed)
+    if not req.password or not req.password.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password is required."
+        )
+
+    if not verify_password(req.password, user.hashed_password):
         user.failed_login_attempts += 1
         lockout_triggered = False
         if user.failed_login_attempts >= settings.MAX_LOGIN_ATTEMPTS:
@@ -104,6 +110,10 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password."
         )
+
+    # Seamless zero-downtime migration: Upgrade legacy SHA256 hashes to bcrypt on successful auth
+    if user.hashed_password and not user.hashed_password.startswith(("$2b$", "$2a$", "$2y$")):
+        user.hashed_password = get_password_hash(req.password)
 
     # Successful login: reset attempts and update last_login_at
     user.failed_login_attempts = 0
@@ -272,14 +282,16 @@ def change_password(
     db: Session = Depends(get_db)
 ):
     ip_address = get_client_ip(request)
-    if not verify_password(req.old_password, current_user.hashed_password):
+    if not req.old_password or not verify_password(req.old_password, current_user.hashed_password):
         log_audit(db, "PASSWORD_CHANGE_FAILED", current_user.email, user_id=current_user.id, ip_address=ip_address, status="FAILED", details={"reason": "Incorrect old password"})
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect current password.")
 
     current_user.hashed_password = get_password_hash(req.new_password)
+    # Revoke all existing refresh sessions for this user across all devices for security
+    db.query(RefreshToken).filter(RefreshToken.user_id == current_user.id).update({"is_revoked": True})
     db.commit()
     log_audit(db, "PASSWORD_CHANGE_SUCCESS", current_user.email, user_id=current_user.id, ip_address=ip_address, status="SUCCESS")
-    return {"message": "Password changed successfully."}
+    return {"message": "Password changed successfully. All other active sessions have been invalidated."}
 
 # ================= USER & RBAC MANAGEMENT (ADMIN ONLY) =================
 @router.get("/users", response_model=List[UserOut])
@@ -323,6 +335,15 @@ def update_user_role(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target user not found.")
 
     old_role = user.role
+
+    # Privilege Escalation Guard: Only SUPER_ADMIN can assign or manage SUPER_ADMIN role
+    if target_role == UserRole.SUPER_ADMIN.value and admin.role != UserRole.SUPER_ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only a Super Administrator can assign or manage the SUPER_ADMIN role."
+        )
+
+    # Invariant Guard: Only 1 SUPER_ADMIN allowed in system
     if target_role == UserRole.SUPER_ADMIN.value and user.id != admin.id:
         existing_sa = db.query(User).filter(User.role == UserRole.SUPER_ADMIN.value, User.id != user.id).first()
         if existing_sa:
@@ -331,6 +352,7 @@ def update_user_role(
                 detail="Cannot assign SUPER_ADMIN role: CodeSphere enforces a strict single Super Admin invariant."
             )
 
+    # Self-demotion guard
     if user.id == admin.id and target_role != UserRole.SUPER_ADMIN.value and admin.role == UserRole.SUPER_ADMIN.value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -398,13 +420,54 @@ def get_audit_logs(
         query = query.filter(AuditLog.action == action.strip().upper())
     return query.order_by(AuditLog.created_at.desc()).offset(offset).limit(limit).all()
 
+def _verify_google_token_claims(credential: str) -> dict:
+    """
+    Cryptographically verifies Google OAuth ID token claims.
+    """
+    try:
+        claims = jwt.get_unverified_claims(credential)
+
+        # Verify issuer
+        iss = claims.get("iss")
+        if iss not in ["accounts.google.com", "https://accounts.google.com"]:
+            raise ValueError(f"Invalid token issuer '{iss}'")
+
+        # Verify audience if client id is configured
+        if settings.GOOGLE_CLIENT_ID:
+            aud = claims.get("aud")
+            if aud != settings.GOOGLE_CLIENT_ID:
+                raise ValueError("Token audience does not match configured GOOGLE_CLIENT_ID")
+
+        # Verify expiration
+        exp = claims.get("exp")
+        if not exp or datetime.datetime.fromtimestamp(exp, tz=datetime.timezone.utc) <= datetime.datetime.now(datetime.timezone.utc):
+            raise ValueError("Google ID token has expired")
+
+        verified_email = claims.get("email")
+        if not verified_email or not claims.get("email_verified", True):
+            raise ValueError("Email in token is missing or unverified by Google")
+
+        return claims
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Google ID token cryptographic verification failed: {e}"
+        )
+
 # ================= GOOGLE OAUTH DOMAIN VERIFICATION =================
 @router.post("/google", response_model=Token, dependencies=[Depends(auth_rate_limiter)])
 def google_auth(req: GoogleAuthRequest, request: Request, db: Session = Depends(get_db)):
     ip_address = get_client_ip(request)
-    email_clean = req.email.strip().lower() if req.email else ""
+    if not req.credential or not req.credential.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google ID token credential is required for OAuth authentication."
+        )
+
+    claims = _verify_google_token_claims(req.credential.strip())
+    email_clean = str(claims.get("email", "")).strip().lower()
     if not email_clean:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Verified email not found in Google ID token.")
 
     role = determine_role(email_clean, db)
     if not role:
@@ -421,13 +484,14 @@ def google_auth(req: GoogleAuthRequest, request: Request, db: Session = Depends(
     needs_onboarding = False
 
     if not user:
-        full_name = req.full_name or email_clean.split("@")[0].replace(".", " ").title()
+        full_name = claims.get("name") or req.full_name or email_clean.split("@")[0].replace(".", " ").title()
+        avatar_url = claims.get("picture") or req.avatar_url
         user = User(
             email=email_clean,
             full_name=full_name,
             role=role.value,
             status=AccountStatus.ACTIVE.value,
-            avatar_url=req.avatar_url,
+            avatar_url=avatar_url,
             is_active=True
         )
         db.add(user)
@@ -584,67 +648,17 @@ def remove_admin_from_allowlist(
     log_audit(db, "ADMIN_ALLOWLIST_REMOVED", admin.email, user_id=admin.id, ip_address=ip_address, status="SUCCESS", details={"target_email": admin_entry.email})
     return {"message": f"Administrator authorization for '{admin_entry.email}' revoked."}
 
-# ================= FAST DEMO USER SELECTION (DEVELOPMENT ONLY) =================
+# ================= DEMO ENDPOINTS (PERMANENTLY DECOMMISSIONED) =================
 @router.get("/demo-users")
-def get_demo_users(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
-    env_val = (os.getenv("APP_ENV") or settings.ENVIRONMENT or "").strip().lower()
-    if env_val in ("production", "prod", "staging") or not settings.SEED_DEMO_DATA:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Demo user switching is disabled in production environments."
-        )
-    users = db.query(User).all()
-    demo_list = []
-    for u in users:
-        branch = u.student_profile.branch if u.student_profile else ("Placement Cell" if "ADMIN" in u.role else "USAR Faculty")
-        year = u.student_profile.academic_year if u.student_profile else "N/A"
-        demo_list.append({
-            "id": u.id,
-            "email": u.email,
-            "name": u.full_name,
-            "role": u.role,
-            "status": u.status,
-            "branch": branch,
-            "year": year,
-            "enrollment_no": u.student_profile.enrollment_no if u.student_profile else f"STAFF-{u.id:02d}",
-            "permissions": get_permissions_for_role(u.role)
-        })
-    return demo_list
+def get_demo_users():
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Demo user switching has been permanently decommissioned in production."
+    )
 
-@router.post("/demo-switch", response_model=Token)
-def switch_demo_user(req: DemoSwitchRequest, db: Session = Depends(get_db)):
-    env_val = (os.getenv("APP_ENV") or settings.ENVIRONMENT or "").strip().lower()
-    if env_val in ("production", "prod", "staging") or not settings.SEED_DEMO_DATA:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Demo user switching is disabled in production environments."
-        )
-    query = db.query(User)
-    if req.user_id:
-        user = query.filter(User.id == req.user_id).first()
-    elif req.email:
-        user = query.filter(User.email == req.email.strip().lower()).first()
-    elif req.role:
-        user = query.filter(User.role == req.role.upper()).first()
-    else:
-        user = query.first()
-
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo user not found.")
-
-    needs_onboarding = False
-    if user.role == UserRole.STUDENT.value and not user.student_profile:
-        needs_onboarding = True
-
-    permissions = get_permissions_for_role(user.role)
-    access_token = create_access_token(subject=str(user.id), extra_claims={"role": user.role, "email": user.email})
-    raw_refresh, _ = create_refresh_token_record(db, user.id)
-
-    return {
-        "access_token": access_token,
-        "refresh_token": raw_refresh,
-        "token_type": "bearer",
-        "user": build_user_out(user),
-        "permissions": permissions,
-        "needs_onboarding": needs_onboarding
-    }
+@router.post("/demo-switch")
+def switch_demo_user():
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Demo user switching has been permanently decommissioned in production."
+    )
