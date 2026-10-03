@@ -1,3 +1,4 @@
+import os
 import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.orm import Session
@@ -216,7 +217,8 @@ def forgot_password(req: PasswordResetRequest, request: Request, db: Session = D
         log_audit(db, "PASSWORD_RESET_REQUEST_NOT_FOUND", email_clean, ip_address=ip_address, status="WARNING")
 
     # Return safe message (includes reset token only in development for automated testing)
-    is_dev = settings.ENVIRONMENT.lower() == "development"
+    env_val = (os.getenv("APP_ENV") or settings.ENVIRONMENT or "").strip().lower()
+    is_dev = env_val not in ("production", "prod", "staging")
     return {
         "message": "If an account exists with that email address, password reset instructions have been generated.",
         "reset_token": raw_token if is_dev else None,
@@ -321,6 +323,20 @@ def update_user_role(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target user not found.")
 
     old_role = user.role
+    if target_role == UserRole.SUPER_ADMIN.value and user.id != admin.id:
+        existing_sa = db.query(User).filter(User.role == UserRole.SUPER_ADMIN.value, User.id != user.id).first()
+        if existing_sa:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot assign SUPER_ADMIN role: CodeSphere enforces a strict single Super Admin invariant."
+            )
+
+    if user.id == admin.id and target_role != UserRole.SUPER_ADMIN.value and admin.role == UserRole.SUPER_ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot demote the primary Super Administrator account."
+        )
+
     user.role = target_role
     db.commit()
     db.refresh(user)
@@ -571,7 +587,8 @@ def remove_admin_from_allowlist(
 # ================= FAST DEMO USER SELECTION (DEVELOPMENT ONLY) =================
 @router.get("/demo-users")
 def get_demo_users(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
-    if settings.ENVIRONMENT.lower() in ("production", "prod", "staging"):
+    env_val = (os.getenv("APP_ENV") or settings.ENVIRONMENT or "").strip().lower()
+    if env_val in ("production", "prod", "staging") or not settings.SEED_DEMO_DATA:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Demo user switching is disabled in production environments."
@@ -596,7 +613,8 @@ def get_demo_users(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
 
 @router.post("/demo-switch", response_model=Token)
 def switch_demo_user(req: DemoSwitchRequest, db: Session = Depends(get_db)):
-    if settings.ENVIRONMENT.lower() in ("production", "prod", "staging"):
+    env_val = (os.getenv("APP_ENV") or settings.ENVIRONMENT or "").strip().lower()
+    if env_val in ("production", "prod", "staging") or not settings.SEED_DEMO_DATA:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Demo user switching is disabled in production environments."

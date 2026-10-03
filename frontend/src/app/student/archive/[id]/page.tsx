@@ -21,7 +21,7 @@ export default function PostEventArchivePage({ params }: { params: Promise<{ id:
   const resolvedParams = use(params);
   const eventId = parseInt(resolvedParams.id);
   const router = useRouter();
-  const { user, isLoading } = useAuth();
+  const { user, isAdmin, isLoading } = useAuth();
   const { success } = useToast();
 
   const [event, setEvent] = useState<Event | null>(null);
@@ -79,7 +79,7 @@ export default function PostEventArchivePage({ params }: { params: Promise<{ id:
 
   const questions = event.questions || [];
   const activeQ = questions[selectedQuestionIdx];
-  const areSolutionsReleased = event.are_solutions_released || user.role === "ADMIN";
+  const areSolutionsReleased = event.are_solutions_released || isAdmin;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">

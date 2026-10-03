@@ -34,8 +34,8 @@ int main() { int x = 0; if (scanf("%d", &x) == 1) printf("%d\\n", x + 1); return
             test_code = """#include <iostream>
 int main() { int x = 0; if (std::cin >> x) std::cout << (x + 1) << std::endl; return 0; }
 """
-        res = code_runner.execute_single(test_code, lang, "1", timeout_seconds=5.0)
-        return res.get("verdict") in (SubmissionVerdict.AC, SubmissionVerdict.AC.value)
+        res = code_runner.execute_single(test_code, lang, "1\n", timeout_seconds=5.0)
+        return res.get("verdict") in (SubmissionVerdict.AC, SubmissionVerdict.AC.value) and res.get("output", "").strip() == "2"
     except Exception:
         return False
 
@@ -60,8 +60,10 @@ int main() {
     return 0;
 }
 """
-    res = code_runner.execute_single(code, "cpp", "10", timeout_seconds=5.0)
-    assert res["verdict"] in (SubmissionVerdict.AC, SubmissionVerdict.AC.value)
+    res = code_runner.execute_single(code, "cpp", "10\n", timeout_seconds=10.0)
+    if "4551" in str(res.get("error")) or "Application Control" in str(res.get("error")):
+        pytest.skip("Host OS Application Control policy blocked binary execution")
+    assert res["verdict"] in (SubmissionVerdict.AC, SubmissionVerdict.AC.value), f"Failed with: {res.get('error')}"
     assert res["output"].strip() == "30"
 
 def test_c_execution():
@@ -76,8 +78,10 @@ int main() {
     return 0;
 }
 """
-    res = code_runner.execute_single(code, "c", "15\n", timeout_seconds=5.0)
-    assert res["verdict"] in (SubmissionVerdict.AC, SubmissionVerdict.AC.value)
+    res = code_runner.execute_single(code, "c", "15\n", timeout_seconds=10.0)
+    if "4551" in str(res.get("error")) or "Application Control" in str(res.get("error")):
+        pytest.skip("Host OS Application Control policy blocked binary execution")
+    assert res["verdict"] in (SubmissionVerdict.AC, SubmissionVerdict.AC.value), f"Failed with: {res.get('error')}"
     assert res["output"].strip() == "20"
 
 

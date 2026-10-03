@@ -1,6 +1,6 @@
 import type {
   User, UserRole, AccountStatus, Permission, AuthResponse, AuditLog, Event as AppEvent, Question, CodeRunResult, FinalSubmitResult,
-  Submission, LeaderboardEntry, LifetimeLeaderboardEntry, StudentReport, PlacementAnalytics, StudentComparison,
+  Submission, LeaderboardEntry, LifetimeLeaderboardEntry, StudentReport, PlacementAnalytics, StudentComparison, LandingMetrics,
   DuplicateCheckResult, QuestionVersion, QuestionAnalytics, QuestionFeedback,
   Assessment, AttemptState, AnswerSaveRequest, AnswerSaveResponse, AntiCheatEventCreate, AntiCheatEventOut, AttemptStatus,
   AssessmentResultDetail, MonitorDashboard, AsyncSubmitResult, SubmissionStatusOut, StudentSubmissionHistoryOut
@@ -15,6 +15,18 @@ function getAuthHeader(): HeadersInit {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {})
   };
+}
+
+export class ApiError extends Error {
+  status: number;
+  data?: any;
+
+  constructor(message: string, status: number, data?: any) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.data = data;
+  }
 }
 
 let isRefreshing = false;
@@ -56,6 +68,10 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
               return null;
             }
           } catch {
+            localStorage.removeItem("codesphere_token");
+            localStorage.removeItem("codesphere_refresh_token");
+            localStorage.removeItem("codesphere_user");
+            window.dispatchEvent(new Event("codesphere_auth_expired"));
             return null;
           } finally {
             isRefreshing = false;
@@ -72,6 +88,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         };
         response = await fetch(url, { ...options, headers: retryHeaders });
       }
+    } else {
+      // No refresh token available, purge invalid access token
+      localStorage.removeItem("codesphere_token");
+      localStorage.removeItem("codesphere_user");
+      window.dispatchEvent(new Event("codesphere_auth_expired"));
     }
   }
 
@@ -83,7 +104,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     } catch {
       errorDetail = await response.text();
     }
-    throw new Error(errorDetail || `HTTP Error ${response.status}`);
+    throw new ApiError(errorDetail || `HTTP Error ${response.status}`, response.status);
   }
 
   return response.json() as Promise<T>;
@@ -159,13 +180,7 @@ export const api = {
         body: JSON.stringify({ email, name, assigned_role })
       }),
     removeAdmin: (adminId: number) =>
-      request<{ message: string }>(`/auth/admins/${adminId}`, { method: "DELETE" }),
-    getDemoUsers: () => request<any[]>("/auth/demo-users"),
-    switchDemoUser: (user_id?: number, role?: string, email?: string) =>
-      request<AuthResponse>("/auth/demo-switch", {
-        method: "POST",
-        body: JSON.stringify({ user_id, role, email })
-      })
+      request<{ message: string }>(`/auth/admins/${adminId}`, { method: "DELETE" })
   },
 
   // Students
@@ -350,6 +365,7 @@ export const api = {
   // Placement Analytics
   analytics: {
     getOverview: () => request<PlacementAnalytics>("/analytics/overview"),
+    getLandingMetrics: () => request<LandingMetrics>("/analytics/landing-metrics"),
     getStudentTopics: (user_id: number) => request<{ topic_mastery: Record<string, number>; score_trajectory: any[] }>(`/analytics/student-topics/${user_id}`),
     compare: (student_ids: number[]) => request<StudentComparison[]>(`/analytics/compare?student_ids=${student_ids.join(",")}`),
     getExportUrl: (branch: string = "ALL", academic_year: number = 0) =>

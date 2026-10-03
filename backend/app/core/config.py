@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     ALLOW_LOCAL_PROCESS_FALLBACK: bool = os.getenv("ALLOW_LOCAL_PROCESS_FALLBACK", "True").lower() in ("true", "1", "yes")
     
     # Seeder Configuration
-    SEED_DEMO_DATA: bool = os.getenv("SEED_DEMO_DATA", "False" if (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT", "development")).lower() in ("production", "prod", "staging") else "True").lower() in ("true", "1", "yes")
+    SEED_DEMO_DATA: bool = os.getenv("SEED_DEMO_DATA", "False").lower() in ("true", "1", "yes")
     SEED_STUDENT_PASSWORD: str = os.getenv("SEED_STUDENT_PASSWORD", "student123")
     SEED_STAFF_PASSWORD: str = os.getenv("SEED_STAFF_PASSWORD", "faculty123")
 

@@ -151,9 +151,12 @@ def is_student_email(email: str) -> bool:
 
 def is_admin_email(email: str, db: Optional[Session] = None) -> bool:
     email_clean = email.strip().lower()
-    if not email_clean.endswith(f"@{settings.ADMIN_EMAIL_DOMAIN.lower()}"):
-        return False
-    
+
+    # 1. Configured initial super admin is always recognized
+    if settings.INITIAL_ADMIN_EMAIL and email_clean == settings.INITIAL_ADMIN_EMAIL.strip().lower():
+        return True
+
+    # 2. Database allowlist or user record lookup
     if db is not None:
         admin_entry = db.query(AdminAllowlist).filter(
             AdminAllowlist.email == email_clean,
@@ -161,16 +164,24 @@ def is_admin_email(email: str, db: Optional[Session] = None) -> bool:
         ).first()
         if admin_entry:
             return True
-        
+
         user = db.query(User).filter(
             User.email == email_clean,
-            User.role.in_([UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value, UserRole.PLACEMENT_ADMIN.value])
+            User.role.in_([
+                UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value, UserRole.PLACEMENT_ADMIN.value,
+                UserRole.FACULTY.value, UserRole.QUESTION_SETTER.value, UserRole.REVIEWER.value
+            ])
         ).first()
         if user:
             return True
 
-    # Check against initial admin configuration
-    if email_clean == settings.INITIAL_ADMIN_EMAIL.lower() or email_clean in ["placement@ipu.ac.in", "admin@ipu.ac.in"]:
+        return False
+
+    # 3. Known system admin emails or matching institutional admin domain (when no DB session)
+    if email_clean in ["placement@ipu.ac.in", "admin@ipu.ac.in"]:
+        return True
+
+    if email_clean.endswith(f"@{settings.ADMIN_EMAIL_DOMAIN.lower()}"):
         return True
 
     return False
@@ -180,7 +191,7 @@ def determine_role(email: str, db: Optional[Session] = None) -> Optional[UserRol
     Authoritative server-side role resolution. Never trusts client-supplied roles.
     """
     email_clean = email.strip().lower()
-    if email_clean == settings.INITIAL_ADMIN_EMAIL.lower():
+    if settings.INITIAL_ADMIN_EMAIL and email_clean == settings.INITIAL_ADMIN_EMAIL.strip().lower():
         return UserRole.SUPER_ADMIN
 
     if db is not None:
@@ -227,7 +238,11 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User account not found.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials or session has expired.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
     # Check Account Status
     if user.status == AccountStatus.DISABLED.value or not user.is_active:

@@ -413,6 +413,16 @@ export interface StudentReport {
   generated_at: string;
 }
 
+export interface LandingMetrics {
+  total_students: number;
+  total_questions: number;
+  total_events: number;
+  active_events: number;
+  total_evaluations: number;
+  pass_rate_percentage: number;
+  system_status: string;
+}
+
 export interface PlacementAnalytics {
   total_registered_students: number;
   total_events_conducted: number;

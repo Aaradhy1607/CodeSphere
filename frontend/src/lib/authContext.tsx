@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { User, UserRole, Permission, AuthResponse, AccountStatus } from "./types";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 
 interface AuthContextType {
   user: User | null;
@@ -36,7 +36,6 @@ interface AuthContextType {
     academic_year: number,
     phone?: string
   ) => Promise<void>;
-  switchUser: (userId?: number, role?: string, email?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -90,9 +89,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setNeedsOnboarding(false);
       }
-    } catch (err) {
-      console.error("Auth session expired or invalid:", err);
+    } catch (err: any) {
       clearAuthData();
+      if (err instanceof ApiError) {
+        if (err.status !== 401 && err.status !== 404) {
+          console.warn("Session validation warning:", err.message);
+        }
+      }
     } finally {
       setIsLoading(false);
     }
@@ -171,16 +174,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const switchUser = async (userId?: number, role?: string, email?: string) => {
-    setIsLoading(true);
-    try {
-      const res = await api.auth.switchDemoUser(userId, role, email);
-      applyAuthData(res);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const logout = async () => {
     try {
       const refreshToken = localStorage.getItem("codesphere_refresh_token");
@@ -234,7 +227,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         googleLogin,
         completeOnboarding,
-        switchUser,
         logout,
         refreshUser
       }}

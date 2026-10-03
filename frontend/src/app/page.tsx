@@ -7,7 +7,6 @@ import { useAuth } from "@/lib/authContext";
 import { api } from "@/lib/api";
 import { Event } from "@/lib/types";
 import { CommandVisual } from "@/components/CommandVisual";
-import { DemoSwitcherModal } from "@/components/DemoSwitcherModal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -19,12 +18,12 @@ import { useToast } from "@/components/ui/Toast";
 import {
   ShieldCheck, GraduationCap, ArrowRight,
   CheckCircle2, Trophy, Sparkles, Building2,
-  Play, Users, Mail, KeyRound
+  Play, Users, Mail, KeyRound, LogOut
 } from "lucide-react";
 
 export default function PlacementCommandCenterPage() {
   const router = useRouter();
-  const { user, login, googleLogin, completeOnboarding, switchUser, needsOnboarding, isLoading } = useAuth();
+  const { user, login, googleLogin, completeOnboarding, needsOnboarding, isLoading, isAdmin, isSuperAdmin, logout } = useAuth();
   const toast = useToast();
 
   // Authentication Form States
@@ -38,9 +37,6 @@ export default function PlacementCommandCenterPage() {
   const [isStudentLoginModal, setIsStudentLoginModal] = useState(false);
   const [studentEmailInput, setStudentEmailInput] = useState("");
   const [studentNameInput, setStudentNameInput] = useState("");
-
-  // Demo Switcher Modal
-  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
 
   // Onboarding Modal
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
@@ -61,8 +57,8 @@ export default function PlacementCommandCenterPage() {
     let isMounted = true;
     Promise.allSettled([
       api.events.list(),
-      api.auth.getDemoUsers()
-    ]).then(([eventsRes, usersRes]) => {
+      api.analytics.getLandingMetrics()
+    ]).then(([eventsRes, metricsRes]) => {
       if (!isMounted) return;
 
       if (eventsRes.status === "fulfilled") {
@@ -75,12 +71,11 @@ export default function PlacementCommandCenterPage() {
         setUpcomingEvent(upcoming || null);
       }
 
-      if (usersRes.status === "fulfilled") {
-        const users = usersRes.value || [];
-        const studentsCount = users.filter((u: any) => u.role === "STUDENT").length;
+      if (metricsRes.status === "fulfilled") {
+        const metrics = metricsRes.value;
         setDbStats({
-          totalStudents: studentsCount,
-          totalEvents: eventsRes.status === "fulfilled" ? eventsRes.value.length : 0,
+          totalStudents: metrics.total_students,
+          totalEvents: metrics.total_events,
         });
       }
     });
@@ -142,20 +137,6 @@ export default function PlacementCommandCenterPage() {
     }
   };
 
-  const handleAdminFastLogin = async () => {
-    setError(null);
-    setIsSubmitting(true);
-    try {
-      await switchUser(undefined, "ADMIN", "placement@ipu.ac.in");
-      toast.success("Signed in as Placement Cell Admin");
-    } catch (err: any) {
-      setError(err.message || "Admin login failed.");
-      toast.error(err.message || "Admin login failed.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const handleCompleteOnboarding = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!onboardEnroll || !onboardName) {
@@ -174,6 +155,11 @@ export default function PlacementCommandCenterPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleCardLogout = async () => {
+    await logout();
+    router.replace("/");
   };
 
   return (
@@ -271,9 +257,9 @@ export default function PlacementCommandCenterPage() {
                     <div
                       className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm"
                       style={{
-                        backgroundColor: user.role === "ADMIN" ? "var(--color-warning-subtle)" : "var(--accent-subtle)",
-                        color: user.role === "ADMIN" ? "var(--color-warning)" : "var(--accent-primary)",
-                        border: `1px solid ${user.role === "ADMIN" ? "var(--color-warning)" : "var(--accent-primary)"}`
+                        backgroundColor: isAdmin ? "var(--color-warning-subtle)" : "var(--accent-subtle)",
+                        color: isAdmin ? "var(--color-warning)" : "var(--accent-primary)",
+                        border: `1px solid ${isAdmin ? "var(--color-warning)" : "var(--accent-primary)"}`
                       }}
                     >
                       {user.full_name?.charAt(0) || "U"}
@@ -283,14 +269,14 @@ export default function PlacementCommandCenterPage() {
                       <CardDescription className="font-mono mt-0.5">{user.email}</CardDescription>
                     </div>
                   </div>
-                  <Badge variant={user.role === "ADMIN" ? "warning" : "default"}>
-                    {user.role}
+                  <Badge variant={isAdmin ? "warning" : "default"}>
+                    {isSuperAdmin ? "SUPER_ADMIN" : user.role}
                   </Badge>
                 </div>
               </CardHeader>
 
               <CardContent className="space-y-4">
-                {user.role === "STUDENT" && user.student_profile && (
+                {!isAdmin && user.student_profile && (
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="p-2.5 rounded-lg" style={{ backgroundColor: "var(--bg-canvas)", border: "1px solid var(--border-subtle)" }}>
                       <span className="text-[10px] uppercase font-mono" style={{ color: "var(--text-muted)" }}>Branch / Year</span>
@@ -324,9 +310,9 @@ export default function PlacementCommandCenterPage() {
                         {activeEvent.description || "Active USAR assessment round."}
                       </p>
                     </div>
-                    <Link href={`/student/events/${activeEvent.id}`} className="block pt-1">
+                    <Link href={isAdmin ? `/admin/events/${activeEvent.id}` : `/student/events/${activeEvent.id}`} className="block pt-1">
                       <Button variant="primary" size="sm" className="w-full" leftIcon={<Play className="w-3.5 h-3.5" />}>
-                        Enter Assessment Arena
+                        {isAdmin ? "Monitor Assessment Arena" : "Enter Assessment Arena"}
                       </Button>
                     </Link>
                   </div>
@@ -342,7 +328,7 @@ export default function PlacementCommandCenterPage() {
                     </div>
                     <h4 className="font-bold text-xs" style={{ color: "var(--text-primary)" }}>{upcomingEvent.title}</h4>
                     <Link
-                      href={user.role === "ADMIN" ? `/admin/events/${upcomingEvent.id}` : "/student/events"}
+                      href={isAdmin ? `/admin/events/${upcomingEvent.id}` : "/student/events"}
                       className="block pt-1"
                     >
                       <Button variant="secondary" size="sm" className="w-full">
@@ -358,7 +344,7 @@ export default function PlacementCommandCenterPage() {
 
                 {/* Navigation Action Buttons */}
                 <div className="space-y-2 pt-1">
-                  {user.role === "ADMIN" ? (
+                  {isAdmin ? (
                     <>
                       <Link href="/admin/dashboard" className="block">
                         <Button variant="primary" size="md" className="w-full" leftIcon={<ShieldCheck className="w-4 h-4" />}>
@@ -399,14 +385,21 @@ export default function PlacementCommandCenterPage() {
                       </div>
                     </>
                   )}
+
+                  {/* Direct Sign Out Action */}
+                  <div className="pt-2 border-t border-[var(--border-subtle)]">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-transparent hover:border-red-200 dark:hover:border-red-900/50 cursor-pointer"
+                      leftIcon={<LogOut className="w-3.5 h-3.5" />}
+                      onClick={handleCardLogout}
+                    >
+                      Sign Out of Session
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
-
-              <CardFooter className="justify-between">
-                <Button variant="ghost" size="sm" onClick={() => setIsDemoModalOpen(true)}>
-                  Switch Demo Account
-                </Button>
-              </CardFooter>
             </Card>
           ) : (
             /* Login Form View */
@@ -471,13 +464,14 @@ export default function PlacementCommandCenterPage() {
                     />
 
                     <Input
-                      label="Password (Optional for Demo)"
+                      label="Password"
                       type="password"
+                      required
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       leftIcon={<KeyRound className="w-4 h-4" />}
-                      helperText="Default demo accounts authenticate passwordless"
+                      helperText="Enter your institutional account password"
                     />
 
                     <Button
@@ -506,32 +500,6 @@ export default function PlacementCommandCenterPage() {
                     </Button>
                   </div>
                 )}
-
-                {/* Fast Access Shortcuts */}
-                <div className="pt-3 space-y-2" style={{ borderTop: "1px solid var(--border-subtle)" }}>
-                  <span className="text-[10px] font-mono uppercase font-bold block" style={{ color: "var(--text-muted)" }}>
-                    Fast Demo Access:
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleAdminFastLogin}
-                      disabled={isSubmitting}
-                      leftIcon={<ShieldCheck className="w-3.5 h-3.5" style={{ color: "var(--color-warning)" }} />}
-                    >
-                      Admin Officer
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsDemoModalOpen(true)}
-                      leftIcon={<Users className="w-3.5 h-3.5" style={{ color: "var(--accent-primary)" }} />}
-                    >
-                      Student Profiles
-                    </Button>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           )}
@@ -658,12 +626,6 @@ export default function PlacementCommandCenterPage() {
           </div>
         </form>
       </Modal>
-
-      {/* Demo Switcher Modal */}
-      <DemoSwitcherModal
-        isOpen={isDemoModalOpen}
-        onClose={() => setIsDemoModalOpen(false)}
-      />
     </div>
   );
 }

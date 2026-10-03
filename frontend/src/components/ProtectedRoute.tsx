@@ -24,10 +24,9 @@ export function ProtectedRoute({
 
   React.useEffect(() => {
     if (!isLoading && !user) {
-      const returnUrl = encodeURIComponent(pathname);
-      router.push(`/login?returnUrl=${returnUrl}`);
+      router.replace("/");
     }
-  }, [user, isLoading, router, pathname]);
+  }, [user, isLoading, router]);
 
   if (isLoading) {
     return (
@@ -61,7 +60,7 @@ export function ProtectedRoute({
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
-              href="/dashboard"
+              href={user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" ? "/admin/dashboard" : "/student/dashboard"}
               className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors shadow-sm"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -92,7 +91,7 @@ export function ProtectedRoute({
             </p>
             <div className="flex justify-center">
               <Link
-                href="/dashboard"
+                href={user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" ? "/admin/dashboard" : "/student/dashboard"}
                 className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors shadow-sm"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
