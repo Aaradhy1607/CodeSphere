@@ -9,6 +9,14 @@ def setup_test_suite_fixtures():
     auto_migrate_db()
     db = SessionLocal()
     try:
+        # 0. Clean extraneous super admins to maintain strict single-admin invariant in test db
+        existing_super_admins = db.query(User).filter(User.role == UserRole.SUPER_ADMIN.value).all()
+        if len(existing_super_admins) > 1:
+            for extra_sa in existing_super_admins:
+                if extra_sa.email != "placement@ipu.ac.in":
+                    db.delete(extra_sa)
+            db.commit()
+
         # 1. Staff Allowlist for test assertions
         staff_allowlist = [
             {"email": "placement@ipu.ac.in", "name": "Placement Cell Operations Admin", "role": UserRole.SUPER_ADMIN.value},

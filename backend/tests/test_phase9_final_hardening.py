@@ -57,7 +57,7 @@ def test_1_staff_multi_role_event_access_and_filtering():
     try:
         super_admin = db.query(User).filter(User.role == UserRole.SUPER_ADMIN.value).first()
         if not super_admin:
-            super_admin = _create_user(db, "super_admin_p9@usar.edu", UserRole.SUPER_ADMIN.value, "Super Admin")
+            super_admin = _create_user(db, "placement@ipu.ac.in", UserRole.SUPER_ADMIN.value, "Super Admin")
         placement_admin = _create_user(db, "placement_admin_p9@usar.edu", UserRole.PLACEMENT_ADMIN.value, "Placement Admin")
         faculty = _create_user(db, "faculty_p9@usar.edu", UserRole.FACULTY.value, "Faculty P9")
         

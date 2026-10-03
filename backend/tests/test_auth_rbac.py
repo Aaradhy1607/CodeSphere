@@ -30,7 +30,7 @@ def setup_db():
         db.close()
     yield
 
-def get_auth_headers(email: str, password: str = "Admin@123") -> dict:
+def get_auth_headers(email: str = "placement@ipu.ac.in", password: str = "admin123") -> dict:
     """Helper to log in and return authorization Bearer header"""
     res = client.post(
         f"{settings.API_V1_STR}/auth/login",
@@ -64,16 +64,18 @@ def test_legacy_hash_compatibility():
 # 2. AUTHENTICATION & LOGIN TESTS
 # -------------------------------------------------------------
 def test_valid_login_super_admin():
+    admin_email = "placement@ipu.ac.in"
+    admin_pwd = "admin123"
     res = client.post(
         f"{settings.API_V1_STR}/auth/login",
-        json={"email": settings.INITIAL_ADMIN_EMAIL, "password": settings.INITIAL_ADMIN_PASSWORD}
+        json={"email": admin_email, "password": admin_pwd}
     )
     assert res.status_code == 200
     data = res.json()
     assert "access_token" in data
     assert "refresh_token" in data
     assert data["token_type"] == "bearer"
-    assert data["user"]["email"] == settings.INITIAL_ADMIN_EMAIL.lower()
+    assert data["user"]["email"] == admin_email.lower()
     assert data["user"]["role"] == UserRole.SUPER_ADMIN.value
     assert Permission.MANAGE_ROLES.value in data["user"]["permissions"]
 
@@ -152,9 +154,11 @@ def test_disabled_account_cannot_login():
 # -------------------------------------------------------------
 def test_refresh_token_flow_and_rotation():
     # 1. Login to get tokens
+    admin_email = "placement@ipu.ac.in"
+    admin_pwd = "admin123"
     res = client.post(
         f"{settings.API_V1_STR}/auth/login",
-        json={"email": settings.INITIAL_ADMIN_EMAIL, "password": settings.INITIAL_ADMIN_PASSWORD}
+        json={"email": admin_email, "password": admin_pwd}
     )
     assert res.status_code == 200
     refresh_token = res.json()["refresh_token"]
@@ -179,9 +183,11 @@ def test_refresh_token_flow_and_rotation():
     assert "revoked" in reuse_res.json()["detail"].lower()
 
 def test_logout_revokes_tokens():
+    admin_email = "placement@ipu.ac.in"
+    admin_pwd = "admin123"
     res = client.post(
         f"{settings.API_V1_STR}/auth/login",
-        json={"email": settings.INITIAL_ADMIN_EMAIL, "password": settings.INITIAL_ADMIN_PASSWORD}
+        json={"email": admin_email, "password": admin_pwd}
     )
     assert res.status_code == 200
     access_token = res.json()["access_token"]
@@ -361,7 +367,7 @@ def test_question_setter_can_create_question_but_not_manage_users():
     assert audit_res.status_code == 403
 
 def test_admin_can_manage_roles_and_view_audit_logs():
-    admin_headers = get_auth_headers(settings.INITIAL_ADMIN_EMAIL, settings.INITIAL_ADMIN_PASSWORD)
+    admin_headers = get_auth_headers("placement@ipu.ac.in", "admin123")
     assert "Authorization" in admin_headers
 
     # Get users list
@@ -377,7 +383,7 @@ def test_admin_can_manage_roles_and_view_audit_logs():
     assert isinstance(logs, list)
 
 def test_role_change_and_status_update():
-    admin_headers = get_auth_headers(settings.INITIAL_ADMIN_EMAIL, settings.INITIAL_ADMIN_PASSWORD)
+    admin_headers = get_auth_headers("placement@ipu.ac.in", "admin123")
     db = SessionLocal()
     target_email = "target.rbac@std.ggsipu.ac.in"
     try:
