@@ -138,17 +138,13 @@ async def observability_middleware(request: Request, call_next):
     return response
 
 # CORS Configuration
+_env_val = (os.getenv("APP_ENV") or settings.ENVIRONMENT or "").strip().lower()
+_is_prod = _env_val in ("production", "prod", "staging")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:[0-9]+)?",
+    allow_origins=settings.get_cors_origins(),
+    allow_origin_regex=None if _is_prod else r"https?://(localhost|127\.0\.0\.1)(:[0-9]+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

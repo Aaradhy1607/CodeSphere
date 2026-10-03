@@ -147,4 +147,121 @@ class AdaptiveLearningEngine:
         
         return f"Historical difficulty for '{topic}' aligns well with designed expectations. Maintain current balanced calibration."
 
+    @classmethod
+    def get_student_adaptive_recommendation(
+        cls,
+        student_id: int,
+        db: Session
+    ) -> Dict[str, Any]:
+        """
+        Derives an evidence-based adaptive learning profile and recommendations for a student.
+        - Cold start (< 3 submissions): flagged with has_sufficient_history: False and provides safe baseline recommendations.
+        - Weak performance (overall accuracy < 40%): recommends foundational reinforcement (difficulty 2.5 - 3.5), target weak topics.
+        - Strong performance (overall accuracy >= 80%): recommends advanced challenges (difficulty 7.5 - 9.0), target complex concepts.
+        - Mixed performance (40% - 80%): recommends balanced progression (difficulty 4.5 - 6.0), focus on lower-accuracy topics.
+        - Never fabricates metrics; all statistics are derived directly from user's final submissions in DB.
+        """
+        from app.models.models import User
+        user = db.query(User).filter(User.id == student_id).first()
+        if not user:
+            return {"error": "Student not found"}
+
+        subs = db.query(Submission).filter(
+            Submission.user_id == student_id,
+            Submission.is_final == True
+        ).all()
+
+        total_attempts = len(subs)
+
+        # Cold start / Insufficient data check
+        if total_attempts < 3:
+            return {
+                "student_id": student_id,
+                "student_name": user.full_name,
+                "total_submissions": total_attempts,
+                "has_sufficient_history": False,
+                "overall_accuracy": round((sum(1 for s in subs if str(s.verdict).upper() in ("AC", "ACCEPTED")) / total_attempts * 100.0), 1) if total_attempts > 0 else 0.0,
+                "recommended_difficulty_score": 3.0,
+                "recommended_difficulty_label": "Easy",
+                "learning_path_mode": "FOUNDATIONAL_BUILDER",
+                "recommended_topics": ["Arrays", "Strings", "Basic Math"],
+                "focus_area": "Foundational programming logic & syntax",
+                "feedback_summary": f"Initial assessment baseline ({total_attempts}/3 submissions). Complete 3 or more problems to unlock tailored adaptive recommendations."
+            }
+
+        # Detailed topic accuracy breakdown
+        topic_stats: Dict[str, Dict[str, int]] = {}
+        ac_count = 0
+
+        for s in subs:
+            is_ac = str(s.verdict).upper() in ("AC", "ACCEPTED")
+            if is_ac:
+                ac_count += 1
+
+            # Extract topic
+            topic_name = "General Problem Solving"
+            if s.question and s.question.topic:
+                topic_name = s.question.topic.strip()
+
+            if topic_name not in topic_stats:
+                topic_stats[topic_name] = {"total": 0, "correct": 0}
+            topic_stats[topic_name]["total"] += 1
+            if is_ac:
+                topic_stats[topic_name]["correct"] += 1
+
+        accuracy = round((ac_count / total_attempts) * 100.0, 1)
+
+        # Classify topic mastery
+        weak_topics = []
+        strong_topics = []
+        for t_name, stats in topic_stats.items():
+            t_acc = (stats["correct"] / stats["total"]) * 100.0
+            if t_acc < 50.0:
+                weak_topics.append({"topic": t_name, "accuracy": round(t_acc, 1), "attempts": stats["total"]})
+            elif t_acc >= 75.0:
+                strong_topics.append({"topic": t_name, "accuracy": round(t_acc, 1), "attempts": stats["total"]})
+
+        # Sort weak topics ascending by accuracy
+        weak_topics.sort(key=lambda x: x["accuracy"])
+        # Sort strong topics descending by accuracy
+        strong_topics.sort(key=lambda x: x["accuracy"], reverse=True)
+
+        if accuracy < 40.0:
+            rec_diff = 3.0
+            rec_label = "Easy"
+            mode = "CONCEPT_REINFORCEMENT"
+            rec_topics = [t["topic"] for t in weak_topics[:3]] or ["Arrays", "Strings", "Sorting"]
+            summary = f"Student performance indicates foundational struggle (overall accuracy {accuracy}%). Recommending reinforced practice in core concepts: {', '.join(rec_topics)}."
+            focus = "Core algorithm understanding and boundary edge case handling."
+        elif accuracy >= 80.0:
+            rec_diff = 8.0
+            rec_label = "Hard"
+            mode = "ADVANCED_CHALLENGE"
+            rec_topics = ["Dynamic Programming", "Graph Theory", "Advanced Trees"]
+            summary = f"Student demonstrates high mastery (overall accuracy {accuracy}%). Recommending advanced optimization and complex algorithmic challenges."
+            focus = "Algorithmic time-space optimization and competitive problem solving."
+        else:
+            rec_diff = 5.5
+            rec_label = "Medium"
+            mode = "BALANCED_PROGRESSION"
+            rec_topics = [t["topic"] for t in weak_topics[:2]] + ([t["topic"] for t in strong_topics[:1]] or ["Greedy Algorithms"])
+            summary = f"Student demonstrates steady progress (overall accuracy {accuracy}%). Recommending balanced progression focusing on weaker areas ({', '.join([t['topic'] for t in weak_topics[:2]]) or 'Intermediate Data Structures'})."
+            focus = "Targeted refinement of weaker topic categories with gradual difficulty escalation."
+
+        return {
+            "student_id": student_id,
+            "student_name": user.full_name,
+            "total_submissions": total_attempts,
+            "has_sufficient_history": True,
+            "overall_accuracy": accuracy,
+            "recommended_difficulty_score": rec_diff,
+            "recommended_difficulty_label": rec_label,
+            "learning_path_mode": mode,
+            "recommended_topics": rec_topics,
+            "focus_area": focus,
+            "feedback_summary": summary,
+            "weak_topics": weak_topics,
+            "strong_topics": strong_topics
+        }
+
 adaptive_learning_engine = AdaptiveLearningEngine()

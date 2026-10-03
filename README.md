@@ -72,6 +72,11 @@ CodeSphere is built on a decoupled, asynchronous, and secure architecture:
    - Real-time autosave with answer version tracking.
    - Double-submit idempotency protection preventing race conditions.
 
+5. **AI Quality Engine & Adaptive Learning**:
+   - Multi-dimensional Problem Quality Scoring across schema, constraints, time/space complexity, and test cases.
+   - Exact and semantic duplicate statement detection.
+   - Deterministic adaptive learning recommendation loop tailoring problem difficulty and topic mastery based on student performance history (with robust cold-start handling).
+
 ---
 
 ## 🚀 Getting Started (Development)
@@ -108,10 +113,12 @@ Frontend web application will be live at `http://localhost:3000`.
 
 In production environments (`APP_ENV=production`):
 
-1. **Zero-Secret Startup Validation**:
-   - The application fails fast on startup if `SECRET_KEY` is set to insecure defaults or contains placeholder strings.
-   - Missing `INITIAL_ADMIN_PASSWORD` or `DATABASE_URL` halts execution immediately.
+1. **Zero-Secret Startup Validation & Fail-Closed Guard**:
+   - Fails fast on startup if `SECRET_KEY` is set to insecure defaults, placeholder strings, or is under 32 characters.
+   - Missing `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD` or `DATABASE_URL` halts execution immediately.
    - SQLite is rejected in production mode; PostgreSQL connection is mandatory.
+   - Single Super-Admin invariant strictly protected against duplication or silent role escalation.
+   - Wildcard `*` CORS origins are forbidden; explicit allowed frontend origins are enforced.
 
 2. **Docker Sandboxing**:
    - Untrusted student code is isolated inside isolated Docker containers with `--network none`, `--cap-drop ALL`, `--memory 256m`, and `--pids-limit 64`.
@@ -124,7 +131,9 @@ In production environments (`APP_ENV=production`):
 export POSTGRES_USER=codesphere_admin
 export POSTGRES_PASSWORD=$(openssl rand -hex 24)
 export SECRET_KEY=$(openssl rand -hex 32)
+export INITIAL_ADMIN_EMAIL=admin@yourcollege.edu
 export INITIAL_ADMIN_PASSWORD=$(openssl rand -hex 16)
+export CORS_ORIGINS=https://codesphere.yourcollege.edu
 
 docker compose -f docker-compose.yml up --build -d
 ```
@@ -133,14 +142,15 @@ docker compose -f docker-compose.yml up --build -d
 
 ## 🧪 Testing & Verification Gate
 
-Run the complete 30-item release gate and full regression suite:
+Run the complete release gates and full regression suite:
 
 ```bash
-# Backend test suite (173+ tests)
+# Backend test suite (235+ tests)
 cd backend
 python -m pytest tests/ -v
 
-# Specific release gate suite
+# Specific master hardening & release gate suite
+python -m pytest tests/test_master_production_hardening.py -v
 python -m pytest tests/test_final_release_gate.py -v
 
 # Frontend TypeScript check & production build

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     INITIAL_ADMIN_EMAIL: str = os.getenv("INITIAL_ADMIN_EMAIL", "") if (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT", "development")).lower() in ("production", "prod", "staging") else os.getenv("INITIAL_ADMIN_EMAIL", "placement@ipu.ac.in")
     INITIAL_ADMIN_PASSWORD: str = os.getenv("INITIAL_ADMIN_PASSWORD", "") if (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT", "development")).lower() in ("production", "prod", "staging") else os.getenv("INITIAL_ADMIN_PASSWORD", "admin123")
     INITIAL_ADMIN_NAME: str = os.getenv("INITIAL_ADMIN_NAME", "Dr. A. K. Sharma (Placement Head)")
+    SEED_DEMO_DATA: bool = os.getenv("SEED_DEMO_DATA", "False").lower() in ("true", "1", "yes")
 
     # Security & Brute-Force Rate Limiting
     MAX_LOGIN_ATTEMPTS: int = int(os.getenv("MAX_LOGIN_ATTEMPTS", "5"))
@@ -71,25 +72,53 @@ class Settings(BaseSettings):
     CODESPHERE_EXECUTION_BACKEND: str = os.getenv("CODESPHERE_EXECUTION_BACKEND", "local")
     REQUIRE_DOCKER_SANDBOX: bool = os.getenv("REQUIRE_DOCKER_SANDBOX", "False").lower() in ("true", "1", "yes")
     ALLOW_LOCAL_PROCESS_FALLBACK: bool = os.getenv("ALLOW_LOCAL_PROCESS_FALLBACK", "True").lower() in ("true", "1", "yes")
-    
-    # Seeder Configuration
-    SEED_DEMO_DATA: bool = os.getenv("SEED_DEMO_DATA", "False").lower() in ("true", "1", "yes")
-    SEED_STUDENT_PASSWORD: str = os.getenv("SEED_STUDENT_PASSWORD", "student123")
-    SEED_STAFF_PASSWORD: str = os.getenv("SEED_STAFF_PASSWORD", "faculty123")
 
-    # CORS
+    # CORS Configuration
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "")
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
         "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "*"
+        "http://127.0.0.1:8000"
     ]
+
+    def get_cors_origins(self) -> List[str]:
+        """
+        Parses and returns normalized CORS origins.
+        Production strictly enforces explicit, non-wildcard origins.
+        """
+        env_val = (os.getenv("APP_ENV") or self.ENVIRONMENT or "").strip().lower()
+        is_prod = env_val in ("production", "prod", "staging")
+
+        raw_env_origins = os.getenv("CORS_ORIGINS") or os.getenv("BACKEND_CORS_ORIGINS") or self.CORS_ORIGINS
+        if raw_env_origins:
+            if isinstance(raw_env_origins, str):
+                origins = [o.strip().rstrip("/") for o in raw_env_origins.split(",") if o.strip()]
+            elif isinstance(raw_env_origins, list):
+                origins = [str(o).strip().rstrip("/") for o in raw_env_origins if str(o).strip()]
+            else:
+                origins = []
+            return origins
+
+        if is_prod:
+            return []
+
+        # Safe development defaults
+        return [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000"
+        ]
 
     def validate_production_security(self):
         """
         Validates production configuration fail-fast invariants.
-        Raises RuntimeError if insecure defaults or missing secrets are detected.
+        Raises RuntimeError if insecure defaults, wildcard CORS, or missing secrets are detected.
         Never logs or prints secret values.
         """
         env_val = (os.getenv("APP_ENV") or self.ENVIRONMENT or "").strip().lower()
@@ -138,6 +167,17 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 "FATAL CONFIGURATION ERROR: SQLite database cannot be used in a production or staging environment. "
                 "Please configure a valid PostgreSQL connection in DATABASE_URL."
+            )
+
+        # Validate Production CORS
+        origins = self.get_cors_origins()
+        if not origins:
+            raise RuntimeError(
+                "FATAL CONFIGURATION ERROR: Explicit CORS_ORIGINS must be configured for production deployments."
+            )
+        if "*" in origins:
+            raise RuntimeError(
+                "FATAL CONFIGURATION ERROR: Wildcard '*' CORS origin is strictly forbidden in production."
             )
 
 settings = Settings()

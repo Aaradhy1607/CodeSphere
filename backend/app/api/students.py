@@ -160,6 +160,25 @@ def get_student_history(
         ]
     }
 
+@router.get("/{user_id}/adaptive-recommendations", dependencies=[Depends(api_general_rate_limiter)])
+def get_student_adaptive_recommendations(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.services.adaptive_learning import adaptive_learning_engine
+    user_perms = get_permissions_for_role(current_user.role)
+    can_view_all = Permission.VIEW_STUDENTS.value in user_perms or "ADMIN" in current_user.role
+
+    # IDOR protection: Allow self or staff with VIEW_STUDENTS
+    if not can_view_all and current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied to student adaptive profile.")
+
+    result = adaptive_learning_engine.get_student_adaptive_recommendation(user_id, db)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
 @router.put("/{user_id}/status")
 def toggle_student_status(
     user_id: int,
