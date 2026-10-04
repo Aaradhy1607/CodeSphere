@@ -339,7 +339,8 @@ class LocalProcessBackend(BaseExecutionBackend):
                 "output": raw_out,
                 "error": None,
                 "time_ms": elapsed_ms,
-                "memory_kb": peak_mem_kb
+                "memory_kb": peak_mem_kb,
+                "backend": "local_process"
             }
 
         except subprocess.TimeoutExpired:
@@ -444,7 +445,7 @@ class DockerExecutionBackend(BaseExecutionBackend):
                 }
             res = self.fallback.execute(session, input_data, timeout_seconds, memory_limit_mb)
             res["backend"] = "local_process_fallback"
-            res["error"] = None if res.get("verdict") == SubmissionVerdict.AC else res.get("error")
+# Do NOT clear the error field - preserve it for debugging and verdict accuracy
             return res
 
         container_id = f"codesphere_eval_{uuid.uuid4().hex[:12]}"
