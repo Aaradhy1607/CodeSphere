@@ -383,12 +383,21 @@ class DockerExecutionBackend(BaseExecutionBackend):
         self._docker_available = self._check_docker()
 
     def _check_docker(self) -> bool:
-        try:
-            res = subprocess.run(["docker", "info"], capture_output=True, timeout=3.0)
-            return res.returncode == 0
-        except Exception:
+    try:
+        info = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=5.0)
+        if info.returncode != 0:
             return False
 
+        # Smoke-test the actual runtime path used by the judge.
+        smoke = subprocess.run(
+            ["docker", "run", "--rm", "--network", "none", "python:3.11-slim", "python", "-c", "print('ok')"],
+            capture_output=True,
+            text=True,
+            timeout=20.0
+        )
+        return smoke.returncode == 0
+    except Exception:
+        return False
     def is_docker_active(self) -> bool:
         return self._docker_available
 
