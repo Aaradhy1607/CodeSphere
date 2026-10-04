@@ -1,5 +1,6 @@
 import os
 import datetime
+from sqlalchemy import func
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
@@ -51,6 +52,16 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user_agent = request.headers.get("User-Agent", "unknown")
 
     user = db.query(User).filter(User.email == email_clean).first()
+    if not user:
+        user = (
+            db.query(User)
+            .join(StudentProfile, StudentProfile.user_id == User.id)
+            .filter(
+                User.role == UserRole.STUDENT.value,
+                func.lower(StudentProfile.enrollment_no) == email_clean
+            )
+            .first()
+        )
     if not user:
         log_audit(db, "LOGIN_FAILED", email_clean, ip_address=ip_address, user_agent=user_agent, status="FAILED", details={"reason": "User not found"})
         raise HTTPException(

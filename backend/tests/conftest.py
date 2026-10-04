@@ -5,21 +5,26 @@ from app.core.security import get_password_hash
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_suite_fixtures():
+    from app.core.config import settings
     Base.metadata.create_all(bind=engine)
     auto_migrate_db()
     db = SessionLocal()
     try:
+        initial_admin_email = (settings.INITIAL_ADMIN_EMAIL or "placement@ipu.ac.in").strip().lower()
+        initial_admin_name = settings.INITIAL_ADMIN_NAME or "Placement Cell Operations Admin"
+        initial_admin_password = settings.INITIAL_ADMIN_PASSWORD or "admin123"
+
         # 0. Clean extraneous super admins to maintain strict single-admin invariant in test db
         existing_super_admins = db.query(User).filter(User.role == UserRole.SUPER_ADMIN.value).all()
         if len(existing_super_admins) > 1:
             for extra_sa in existing_super_admins:
-                if extra_sa.email != "placement@ipu.ac.in":
+                if extra_sa.email != initial_admin_email:
                     db.delete(extra_sa)
             db.commit()
 
         # 1. Staff Allowlist for test assertions
         staff_allowlist = [
-            {"email": "placement@ipu.ac.in", "name": "Placement Cell Operations Admin", "role": UserRole.SUPER_ADMIN.value},
+            {"email": initial_admin_email, "name": initial_admin_name, "role": UserRole.SUPER_ADMIN.value},
             {"email": "admin@ipu.ac.in", "name": "Placement Cell Operations Admin", "role": UserRole.ADMIN.value},
             {"email": "usar.tnp@ipu.ac.in", "name": "USAR Placement Head", "role": UserRole.ADMIN.value},
             {"email": "tnp.officer@ipu.ac.in", "name": "USAR Placement Coordinator", "role": UserRole.PLACEMENT_ADMIN.value},
@@ -27,6 +32,9 @@ def setup_test_suite_fixtures():
             {"email": "setter.ai@ipu.ac.in", "name": "Dr. Neha Verma (Question Setter)", "role": UserRole.QUESTION_SETTER.value},
             {"email": "reviewer.cs@ipu.ac.in", "name": "Dr. Vikram Mehta (Curriculum Reviewer)", "role": UserRole.REVIEWER.value},
         ]
+        if initial_admin_email != "placement@ipu.ac.in":
+            staff_allowlist.append({"email": "placement@ipu.ac.in", "name": "Placement Operations Admin", "role": UserRole.ADMIN.value})
+
         for entry in staff_allowlist:
             existing = db.query(AdminAllowlist).filter(AdminAllowlist.email == entry["email"]).first()
             if not existing:
@@ -43,10 +51,10 @@ def setup_test_suite_fixtures():
         # 2. Test Users required across unit and integration tests
         test_users = [
             {
-                "email": "placement@ipu.ac.in",
-                "full_name": "Placement Operations Admin",
+                "email": initial_admin_email,
+                "full_name": initial_admin_name,
                 "role": UserRole.SUPER_ADMIN.value,
-                "password": "admin123"
+                "password": initial_admin_password
             },
             {
                 "email": "admin@ipu.ac.in",
@@ -79,6 +87,14 @@ def setup_test_suite_fixtures():
                 "password": "student123"
             }
         ]
+        if initial_admin_email != "placement@ipu.ac.in":
+            test_users.append({
+                "email": "placement@ipu.ac.in",
+                "full_name": "Placement Operations Admin",
+                "role": UserRole.ADMIN.value,
+                "password": "admin123"
+            })
+
         for u in test_users:
             existing_user = db.query(User).filter(User.email == u["email"]).first()
             if not existing_user:

@@ -84,7 +84,7 @@ class AuditLogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class LoginRequest(BaseModel):
-    email: str
+    email: str = Field(..., description="Institutional email address or student enrollment number")
     password: str = Field(..., min_length=1, description="Institutional account password")
 
 class GoogleAuthRequest(BaseModel):
@@ -949,5 +949,4 @@ class StudentSubmissionHistoryOut(BaseModel):
     best_memory_kb: Optional[float] = None
     improvement_note: Optional[str] = None
     history: List[SubmissionHistoryItemOut] = []
-
 

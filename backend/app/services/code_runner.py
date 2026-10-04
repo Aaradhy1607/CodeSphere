@@ -148,9 +148,12 @@ class LocalProcessBackend(BaseExecutionBackend):
     def _get_exec_env(self) -> Dict[str, str]:
         # Minimal system allowlist for subprocess execution — strips all app secrets, db credentials, and API keys
         safe_keys = {
-            "SYSTEMROOT", "SystemRoot", "WINDIR", "COMSPEC", "PATH", "Path", "path",
+            "SYSTEMROOT", "SystemRoot", "WINDIR", "COMSPEC", "PATH", "Path", "path", "PATHEXT", "pathext",
             "TEMP", "TMP", "USERPROFILE", "HOME", "LANG", "LC_ALL", "NUMBER_OF_PROCESSORS",
-            "PROCESSOR_ARCHITECTURE", "OS", "LOCALAPPDATA", "APPDATA", "HOMEDRIVE", "HOMEPATH"
+            "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER", "PROCESSOR_LEVEL", "PROCESSOR_REVISION",
+            "OS", "LOCALAPPDATA", "APPDATA", "HOMEDRIVE", "HOMEPATH", "SYSTEMDRIVE", "SystemDrive",
+            "ALLUSERSPROFILE", "PUBLIC", "DRIVERDATA", "CommonProgramFiles", "ProgramData", "ProgramFiles",
+            "ProgramFiles(x86)", "CommonProgramFiles(x86)", "SESSIONNAME", "USERDOMAIN", "USERNAME"
         }
         env = {k: v for k, v in os.environ.items() if k in safe_keys}
         if self.is_windows:

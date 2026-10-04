@@ -83,14 +83,14 @@ def _is_compiler_available(bin_name: str) -> bool:
     try:
         lang = "cpp" if "++" in bin_name else "c"
         if lang == "c":
-            test_code = """#include <stdio.h>
+            test_code = r"""#include <stdio.h>
 #include <stdlib.h>
 int main() {
     int a, b;
     if (scanf("%d %d", &a, &b) == 2) {
         int *sum = (int*)malloc(sizeof(int));
         *sum = a + b;
-        printf("%d\\n", *sum);
+        printf("%d\n", *sum);
         free(sum);
     }
     return 0;
@@ -112,7 +112,7 @@ def test_2_c_accepted_solution():
         pytest.skip("gcc compiler not available or execution blocked by host OS policy")
 
     # Validates pure C syntax (malloc, stdio, C99/C11 features)
-    code = """
+    code = r"""
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -121,7 +121,7 @@ int main() {
     if (scanf("%d %d", &a, &b) == 2) {
         int *sum = (int*)malloc(sizeof(int));
         *sum = a + b;
-        printf("%d\\n", *sum);
+        printf("%d\n", *sum);
         free(sum);
     }
     return 0;
@@ -131,6 +131,8 @@ int main() {
         {"id": 1, "input_data": "7 8\n", "expected_output": "15", "points": 10, "is_hidden": False}
     ]
     res = code_runner.evaluate_test_cases(code, "c", tcs)
+    if "4551" in str(res.get("error_message")) or "Application Control" in str(res.get("error_message")):
+        pytest.skip("Host OS Application Control policy blocked binary execution")
     assert res["verdict"] in (SubmissionVerdict.AC, SubmissionVerdict.AC.value)
     assert res["passed_count"] == 1
     assert res["score"] == 100.0
@@ -159,6 +161,8 @@ int main() {
         {"id": 1, "input_data": "25 75\n", "expected_output": "100", "points": 10, "is_hidden": False}
     ]
     res = code_runner.evaluate_test_cases(code, "cpp", tcs)
+    if "4551" in str(res.get("error_message")) or "Application Control" in str(res.get("error_message")):
+        pytest.skip("Host OS Application Control policy blocked binary execution")
     assert res["verdict"] in (SubmissionVerdict.AC, SubmissionVerdict.AC.value)
     assert res["passed_count"] == 1
 

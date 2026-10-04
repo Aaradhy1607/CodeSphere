@@ -30,11 +30,13 @@ def setup_db():
         db.close()
     yield
 
-def get_auth_headers(email: str = "placement@ipu.ac.in", password: str = "admin123") -> dict:
+def get_auth_headers(email: str = None, password: str = None) -> dict:
     """Helper to log in and return authorization Bearer header"""
+    admin_email = email or (settings.INITIAL_ADMIN_EMAIL or "placement@ipu.ac.in")
+    admin_pwd = password or (settings.INITIAL_ADMIN_PASSWORD or "admin123")
     res = client.post(
         f"{settings.API_V1_STR}/auth/login",
-        json={"email": email, "password": password}
+        json={"email": admin_email, "password": admin_pwd}
     )
     if res.status_code == 200:
         token = res.json()["access_token"]
@@ -64,8 +66,8 @@ def test_legacy_hash_compatibility():
 # 2. AUTHENTICATION & LOGIN TESTS
 # -------------------------------------------------------------
 def test_valid_login_super_admin():
-    admin_email = "placement@ipu.ac.in"
-    admin_pwd = "admin123"
+    admin_email = (settings.INITIAL_ADMIN_EMAIL or "placement@ipu.ac.in").strip().lower()
+    admin_pwd = (settings.INITIAL_ADMIN_PASSWORD or "admin123").strip()
     res = client.post(
         f"{settings.API_V1_STR}/auth/login",
         json={"email": admin_email, "password": admin_pwd}
@@ -367,7 +369,7 @@ def test_question_setter_can_create_question_but_not_manage_users():
     assert audit_res.status_code == 403
 
 def test_admin_can_manage_roles_and_view_audit_logs():
-    admin_headers = get_auth_headers("placement@ipu.ac.in", "admin123")
+    admin_headers = get_auth_headers()
     assert "Authorization" in admin_headers
 
     # Get users list
@@ -383,7 +385,7 @@ def test_admin_can_manage_roles_and_view_audit_logs():
     assert isinstance(logs, list)
 
 def test_role_change_and_status_update():
-    admin_headers = get_auth_headers("placement@ipu.ac.in", "admin123")
+    admin_headers = get_auth_headers()
     db = SessionLocal()
     target_email = "target.rbac@std.ggsipu.ac.in"
     try:

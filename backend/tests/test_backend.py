@@ -27,8 +27,8 @@ def _is_compiler_available(bin_name: str) -> bool:
     try:
         lang = "cpp" if "++" in bin_name else "c"
         if lang == "c":
-            test_code = """#include <stdio.h>
-int main() { int x = 0; if (scanf("%d", &x) == 1) printf("%d\\n", x + 1); return 0; }
+            test_code = r"""#include <stdio.h>
+int main() { int x = 0; if (scanf("%d", &x) == 1) printf("%d\n", x + 1); return 0; }
 """
         else:
             test_code = """#include <iostream>
@@ -69,11 +69,11 @@ int main() {
 def test_c_execution():
     if not _is_compiler_available("gcc"):
         pytest.skip("gcc compiler not available or functional on host environment")
-    code = """#include <stdio.h>
+    code = r"""#include <stdio.h>
 int main() {
     int x;
     if (scanf("%d", &x) == 1) {
-        printf("%d\\n", x + 5);
+        printf("%d\n", x + 5);
     }
     return 0;
 }
