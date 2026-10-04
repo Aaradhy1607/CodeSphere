@@ -268,9 +268,16 @@ class LocalProcessBackend(BaseExecutionBackend):
 
             try:
                 if proc.stdin:
-                    proc.stdin.write(input_bytes)
-                    proc.stdin.flush()
-                    proc.stdin.close()
+                    try:
+                        proc.stdin.write(input_bytes)
+                        proc.stdin.flush()
+                    except OSError:
+                        pass
+                    finally:
+                        try:
+                            proc.stdin.close()
+                        except OSError:
+                            pass
             except Exception:
                 pass
 
@@ -396,8 +403,9 @@ class DockerExecutionBackend(BaseExecutionBackend):
                 timeout=20.0
             )
             return smoke.returncode == 0
-    except Exception:
-        return False
+        except Exception:
+            return False
+
     def is_docker_active(self) -> bool:
         return self._docker_available
 
@@ -476,8 +484,10 @@ class DockerExecutionBackend(BaseExecutionBackend):
             "-w", "/workspace",
             "-e", "LANG=C.UTF-8",
             "-e", "LC_ALL=C.UTF-8",
-            image,
         ]
+        if hasattr(os, "getuid") and hasattr(os, "getgid"):
+            docker_cmd.extend(["--user", f"{os.getuid()}:{os.getgid()}"])
+        docker_cmd.append(image)
 
         # Append execution command mapping host paths to /workspace paths
         if session.cmd:
@@ -492,7 +502,10 @@ class DockerExecutionBackend(BaseExecutionBackend):
                 elif os.path.basename(arg_str).lower() in ["node", "node.exe"]:
                     adapted_cmd.append("node")
                 # Map any absolute host temp_dir paths into container /workspace paths
-                elif os.path.abspath(arg_str).startswith(abs_temp):
+                elif os.path.isabs(arg_str) and (
+                    os.path.abspath(arg_str) == abs_temp
+                    or os.path.abspath(arg_str).startswith(abs_temp + os.sep)
+                ):
                     rel = os.path.relpath(arg_str, abs_temp).replace("\\", "/")
                     adapted_cmd.append(f"/workspace/{rel}")
                 elif arg_str == abs_temp:
@@ -534,18 +547,26 @@ class DockerExecutionBackend(BaseExecutionBackend):
             res["backend"] = "local_process_fallback"
             return res
 
-        stdout_chunks: List[bytes] = []
-        stderr_chunks: List[bytes] = []
-        total_bytes = 0
-        ole_triggered = False
+        try:
+            stdout_chunks: List[bytes] = []
+            stderr_chunks: List[bytes] = []
+            total_bytes = 0
+            ole_triggered = False
 
             def reader_thread():
                 nonlocal total_bytes, ole_triggered
                 try:
                     if proc.stdin:
-                        proc.stdin.write(input_bytes)
-                        proc.stdin.flush()
-                        proc.stdin.close()
+                        try:
+                            proc.stdin.write(input_bytes)
+                            proc.stdin.flush()
+                        except OSError:
+                            pass
+                        finally:
+                            try:
+                                proc.stdin.close()
+                            except OSError:
+                                pass
 
                     while True:
                         chunk = proc.stdout.read(4096)
