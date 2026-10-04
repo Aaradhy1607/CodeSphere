@@ -443,8 +443,8 @@ class DockerExecutionBackend(BaseExecutionBackend):
                     "backend": "docker_unavailable_fail_closed"
                 }
             res = self.fallback.execute(session, input_data, timeout_seconds, memory_limit_mb)
-            res["backend"] = "local_process_fallback"
-            return res
+res["backend"] = "local_process_fallback"
+return res
 
         container_id = f"codesphere_eval_{uuid.uuid4().hex[:12]}"
         abs_temp = os.path.abspath(session.temp_dir)
