@@ -529,6 +529,10 @@ class DockerExecutionBackend(BaseExecutionBackend):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
+        except Exception:
+            res = self.fallback.execute(session, input_data, timeout_seconds, memory_limit_mb)
+            res["backend"] = "local_process_fallback"
+            return res
 
             stdout_chunks: List[bytes] = []
             stderr_chunks: List[bytes] = []
