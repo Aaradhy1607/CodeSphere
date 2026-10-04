@@ -383,19 +383,19 @@ class DockerExecutionBackend(BaseExecutionBackend):
         self._docker_available = self._check_docker()
 
     def _check_docker(self) -> bool:
-    try:
-        info = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=5.0)
-        if info.returncode != 0:
-            return False
+        try:
+            info = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=5.0)
+            if info.returncode != 0:
+                return False
 
-        # Smoke-test the actual runtime path used by the judge.
-        smoke = subprocess.run(
-            ["docker", "run", "--rm", "--network", "none", "python:3.11-slim", "python", "-c", "print('ok')"],
-            capture_output=True,
-            text=True,
-            timeout=20.0
-        )
-        return smoke.returncode == 0
+            # Smoke-test the actual runtime path used by the judge.
+            smoke = subprocess.run(
+                ["docker", "run", "--rm", "--network", "none", "python:3.11-slim", "python", "-c", "print('ok')"],
+                capture_output=True,
+                text=True,
+                timeout=20.0
+            )
+            return smoke.returncode == 0
     except Exception:
         return False
     def is_docker_active(self) -> bool:
@@ -534,10 +534,10 @@ class DockerExecutionBackend(BaseExecutionBackend):
             res["backend"] = "local_process_fallback"
             return res
 
-            stdout_chunks: List[bytes] = []
-            stderr_chunks: List[bytes] = []
-            total_bytes = 0
-            ole_triggered = False
+        stdout_chunks: List[bytes] = []
+        stderr_chunks: List[bytes] = []
+        total_bytes = 0
+        ole_triggered = False
 
             def reader_thread():
                 nonlocal total_bytes, ole_triggered
