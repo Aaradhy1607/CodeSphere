@@ -212,7 +212,17 @@ def test_6_submission_analytics_and_static_heuristics(db_session):
     db_session.add(q)
     db_session.commit()
 
-    user_id = 99
+    # ✅ CREATE USER FIRST
+    user = User(
+        email=f"two-sum-user-{uuid.uuid4().hex[:6]}@test.com",
+        full_name="Two Sum Test User",
+        role=UserRole.STUDENT.value,
+        status=AccountStatus.ACTIVE.value
+    )
+    db_session.add(user)
+    db_session.commit()
+    user_id = user.id  # ✅ Use the actual user ID
+    
     # Attempt 1: O(N^2) Nested loop WA
     code_att1 = """def two_sum(nums, target):
     for i in range(len(nums)):
